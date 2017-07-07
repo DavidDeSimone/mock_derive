@@ -34,23 +34,55 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use std::str::FromStr;
 
-#[proc_macro_attribute]
-pub fn mock(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
-    attr_ts
+struct Function {
+    pub name: syn::Ident,
+    pub args: Vec<syn::Ident>
+}
+
+
+fn parse_fn(item: &syn::ImplItem) -> Option<Function> {
+    if item.vis == syn::Visibility::Public {
+        Some(Function {name: item.ident.clone(),  args: Vec::new() })
+    } else {
+        None
+    }
+}
+
+fn parse_impl(item: &syn::Item) -> Vec<Function> {
+    let mut result = Vec::new();
+    match item.node {
+        syn::ItemKind::Impl(unsafety, impl_token, ref generics, ref trait_, ref self_ty, ref items) => {
+            for item in items {
+                match parse_fn(item) {
+                    Some(fnc) => { result.push(fnc); },
+                    None => { },
+                }
+            }
+        },
+        _ => { panic!("#[mock] must be applied to an Impl statement."); }
+    };
+
+    result
 }
 
 #[proc_macro_attribute]
-pub fn mockable(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
-    let fn_item = syn::parse_item(&fn_ts.to_string()).unwrap();
-    let ident = &fn_item.ident;
+pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
+    let impl_item = syn::parse_item(&impl_ts.to_string()).unwrap();
+    let fns = parse_impl(&impl_item);
+    
     let stream = quote! {
-        #fn_item
-        
-        impl #ident {
-            pub fn new_mock() {
+        // @TODO make unique name
+        struct MockImpl {
+            // @TODO hashmap of callchains
+        }
+
+        impl HelloWorld for MockImpl {
+            fn hello_world() {
+                println("World Hello");
             }
         }
     };
 
-    TokenStream::from_str(stream.as_str()).unwrap()
+    //    TokenStream::from_str(stream.as_str()).unwrap()
+    attr_ts
 }

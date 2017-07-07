@@ -26,9 +26,8 @@ SOFTWARE.
 #[macro_use]
 extern crate mock_derive;
 
-use mock_derive::{mock, mockable};
+use mock_derive::mock;
 
-#[mockable]
 pub struct Foo {
     x: i32,
     y: i32,
@@ -46,7 +45,7 @@ impl HelloWorld for Foo {
 }
 
 /* Example of API
-   let mock = Foo::new_mock(...)
+   let mock = new_mock::<HelloWorld>(...)
               .method_bar()
               .first_call()
               .set_result(Ok(13))
