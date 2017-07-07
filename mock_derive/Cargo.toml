@@ -1,0 +1,11 @@
+[package]
+name = "mock_derive"
+version = "0.1.0"
+authors = ["DavidDeSimone <djd231@scarletmail.rutgers.edu>"]
+
+[dependencies]
+quote = "0.3"
+syn = { version = "0.11.11", features = ["full"] }
+
+[lib]
+proc-macro = true
