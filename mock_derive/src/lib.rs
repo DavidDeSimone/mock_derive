@@ -36,16 +36,6 @@ use std::str::FromStr;
 
 struct Function {
     pub name: syn::Ident,
-    pub args: Vec<syn::Ident>
-}
-
-
-fn parse_fn(item: &syn::ImplItem) -> Option<Function> {
-    if item.vis == syn::Visibility::Public {
-        Some(Function {name: item.ident.clone(),  args: Vec::new() })
-    } else {
-        None
-    }
 }
 
 fn parse_impl(item: &syn::Item) -> Vec<Function> {
@@ -53,10 +43,7 @@ fn parse_impl(item: &syn::Item) -> Vec<Function> {
     match item.node {
         syn::ItemKind::Impl(unsafety, impl_token, ref generics, ref trait_, ref self_ty, ref items) => {
             for item in items {
-                match parse_fn(item) {
-                    Some(fnc) => { result.push(fnc); },
-                    None => { },
-                }
+                result.push(Function {name: item.ident.clone() });
             }
         },
         _ => { panic!("#[mock] must be applied to an Impl statement."); }
@@ -68,21 +55,54 @@ fn parse_impl(item: &syn::Item) -> Vec<Function> {
 #[proc_macro_attribute]
 pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let impl_item = syn::parse_item(&impl_ts.to_string()).unwrap();
+
     let fns = parse_impl(&impl_item);
+    let mut methods = quote::Tokens::new();
+    
+    // For each method in the Impl block, we create a "method_" name function that returns an
+    // object to mutate
+    for fnc in fns {
+        let name = fnc.name;
+        let name_stream = quote! { #name };
+        let ident = concat_idents("method_", name_stream.as_str());
+        methods = quote! {
+            #methods
+            pub fn #ident(&mut self) -> MockMethod<T> {
+                MockMethod { imp: self }
+            }
+        }
+    }
     
     let stream = quote! {
         // @TODO make unique name
-        struct MockImpl {
+        struct MockImpl<T> {
+            fallback: T
             // @TODO hashmap of callchains
         }
 
-        impl HelloWorld for MockImpl {
+        // @TODO add impl block that adds mock functionality
+        struct MockMethod<'a, T: 'a> {
+            pub imp: &'a MockImpl<T>
+        }
+
+        impl<T> MockImpl<T> {
+            #methods
+
+            pub fn new(t: T) -> MockImpl<T> {
+                MockImpl { fallback: t }
+            }
+        }
+
+        impl<T> HelloWorld for MockImpl<T> {
             fn hello_world() {
-                println("World Hello");
+                println!("World Hello");
             }
         }
     };
 
-    //    TokenStream::from_str(stream.as_str()).unwrap()
-    attr_ts
+    TokenStream::from_str(stream.as_str()).unwrap()
+}
+
+fn concat_idents(lhs: &str, rhs: &str) -> syn::Ident {
+    syn::Ident::new(format!("{}{}", lhs, rhs))
 }

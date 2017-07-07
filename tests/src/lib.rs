@@ -33,6 +33,12 @@ pub struct Foo {
     y: i32,
 }
 
+impl Foo {
+    pub fn new() -> Foo {
+        Foo { x: 32, y: 32 }
+    }
+}
+
 trait HelloWorld {
     fn hello_world();
 }
@@ -45,17 +51,29 @@ impl HelloWorld for Foo {
 }
 
 /* Example of API
-   let mock = new_mock::<HelloWorld>(...)
+   // Any non-specified call will result in a no-op call
+   let mock = MockHelloWorld::new()
               .method_bar()
               .first_call()
               .set_result(Ok(13))
               .second_call()
-              .set_result(None);
+              .set_result(None)
+              .create();
 
-   let mock_two = Foo::new_mock(...)
+   // Will fall back to Foo's implementation
+   // if method is not mocked
+   let foo = Foo::new(...);
+   let mock = MockHelloWorld::new(foo)
+              .method_hello_world()
+              .first_call()
+              .set_result(20)
+              .create();
+
+   let mock_two = FooMock::new_mock(...)
                   .method_baz()
                   .nth_call(15)
-                  .set_result(2);
+                  .set_result(2)
+                  .create();
 
 
   mock.bar(); // returns Ok(13)
@@ -63,10 +81,11 @@ impl HelloWorld for Foo {
   mock.baz(); // Falls to 'baz' impl
  
 */
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-    }
+#[test]
+fn it_works() {
+    let foo = Foo::new();
+    let _ = MockImpl::new(foo)
+        .method_hello_world();
+    
 }
+
