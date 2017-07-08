@@ -40,34 +40,34 @@ impl Foo {
 }
 
 trait HelloWorld {
-    fn hello_world();
+    fn hello_world(&self);
 }
 
 #[mock]
 impl HelloWorld for Foo {
-    fn hello_world() {
+    fn hello_world(&self) {
         println!("Hello World!");
     }
 }
 
 /* Example of API
    // Any non-specified call will result in a no-op call
-   let mock = MockHelloWorld::new()
-              .method_bar()
-              .first_call()
-              .set_result(Ok(13))
-              .second_call()
-              .set_result(None)
-              .create();
+   let mut mock = MockHelloWorld::new();
+   mock.method_bar()
+       .first_call()
+       .set_result(Ok(13))
+       .second_call()
+       .set_result(None)
+       .create();
 
    // Will fall back to Foo's implementation
    // if method is not mocked
    let foo = Foo::new(...);
-   let mock = MockHelloWorld::new(foo)
-              .method_hello_world()
-              .first_call()
-              .set_result(20)
-              .create();
+   let mut mock = MockHelloWorld::new(foo);
+   mock.method_hello_world()
+       .first_call()
+       .set_result(20)
+       .create();
 
    let mock_two = FooMock::new_mock(...)
                   .method_baz()
@@ -84,8 +84,12 @@ impl HelloWorld for Foo {
 #[test]
 fn it_works() {
     let foo = Foo::new();
-    let _ = MockImpl::new(foo)
-        .method_hello_world();
-    
+    let mut mock = MockImpl::new(foo);
+    mock.method_hello_world()
+        .first_call()
+        .set_result(());
+
+
+    mock.hello_world();
 }
 

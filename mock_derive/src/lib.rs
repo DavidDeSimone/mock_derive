@@ -76,25 +76,47 @@ pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let stream = quote! {
         // @TODO make unique name
         struct MockImpl<T> {
-            fallback: T
+            fallback: T,
+            call_num: i32,
             // @TODO hashmap of callchains
         }
 
         // @TODO add impl block that adds mock functionality
         struct MockMethod<'a, T: 'a> {
-            pub imp: &'a MockImpl<T>
+            pub imp: &'a mut MockImpl<T>,
         }
 
         impl<T> MockImpl<T> {
             #methods
 
             pub fn new(t: T) -> MockImpl<T> {
-                MockImpl { fallback: t }
+                MockImpl { fallback: t, call_num: 0 }
+            }
+        }
+
+        impl<'a, T: 'a> MockMethod<'a, T> {
+            pub fn first_call(mut self) -> Self {
+                self.nth_call(1)
+            }
+
+            pub fn second_call(mut self) -> Self {
+                self.nth_call(2)
+            }
+
+            pub fn nth_call(mut self, num: i32) -> Self {
+                self.imp.call_num = num;
+                self
+            }
+
+            // @TODO U in this case will be a tuple of results, that will be unpacked
+            // and applied to a function. We need to figure out how to store this tuple
+            pub fn set_result<U>(self, tuple: U) -> Self {
+                self
             }
         }
 
         impl<T> HelloWorld for MockImpl<T> {
-            fn hello_world() {
+            fn hello_world(&self) {
                 println!("World Hello");
             }
         }
