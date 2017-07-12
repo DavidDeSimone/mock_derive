@@ -64,7 +64,7 @@ impl HelloWorld for Foo {
    let foo = Foo::new(...);
    let mut mock = MockHelloWorld::new(foo);
    mock.method_hello_world()
-       .first_call()
+       .when(|| true) 
        .set_result((20));
 
    let mock_two = FooMock::new_mock(...)
@@ -88,6 +88,7 @@ fn it_works() {
     mock.set_fallback(foo);
     mock.method_hello_world()
         .first_call()
+        .when(|| true)
         .set_result(());
 
 

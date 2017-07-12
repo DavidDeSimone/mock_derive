@@ -25,7 +25,7 @@ SOFTWARE.
 #![feature(proc_macro)]
 #![recursion_limit = "128"]
 
-#[macro_use]
+//#[macro_use]
 extern crate syn;
 #[macro_use]
 extern crate quote;
@@ -42,10 +42,10 @@ struct Function {
 fn parse_impl(item: &syn::Item) -> Vec<Function> {
     let mut result = Vec::new();
     match item.node {
-        syn::ItemKind::Impl(unsafety, impl_token, ref generics, ref trait_, ref self_ty, ref items) => {
+        syn::ItemKind::Impl(_unsafety, _impl_token, ref _generics, ref _trait_, ref _self_ty, ref items) => {
             for item in items {
                 match item.node {
-                    syn::ImplItemKind::Method(ref sig, ref block) => {
+                    syn::ImplItemKind::Method(ref sig, ref _block) => {
                         result.push(Function {name: item.ident.clone(), decl: sig.decl.clone() } );
                     },
                     _ => { }
@@ -59,7 +59,7 @@ fn parse_impl(item: &syn::Item) -> Vec<Function> {
 }
 
 #[proc_macro_attribute]
-pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
+pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let impl_item = syn::parse_item(&impl_ts.to_string()).unwrap();
 
     let fns = parse_impl(&impl_item);
@@ -72,29 +72,32 @@ pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         let decl = fnc.decl.inputs;
         let name_stream = quote! { #name };
         let ident = concat_idents("method_", name_stream.as_str());
-        // @TODO make MockMethod also take in a U, where U will be the type of tuple
-        // based on the types in 'inputs'
         let mut args = Vec::new();
         for input in decl {
             match input {
-                syn::FnArg::Captured(pat, ty) => {
-                    args.push(ty.clone());
+                syn::FnArg::Captured(_pat, ty) => {
+                    args.push(ty);
                 },
                 _ => {}
             }
         }
 
-        let tuple_type = match args.len() {
+        let _ = match args.len() {
             0 => { quote!{ () } },
             1 => { quote!{ (#args[0]) } },
             2 => { quote!{ (#args[0], #args[1]) } },
             3 => { quote!{ (#args[0], #args[1], #args[2]) } },
             _ => { panic!("Unexpected number of args, max is 3") }
         };
+
+        let return_type = match fnc.decl.output {
+            syn::FunctionRetTy::Default => { quote! { () } },
+            syn::FunctionRetTy::Ty(ref ty) => { quote! { #ty } },
+        };
         
         methods = quote! {
             #methods
-            pub fn #ident(&mut self) -> MockMethod<T, #tuple_type> {
+            pub fn #ident(&mut self) -> MockMethod<T, #return_type> {
                 MockMethod { imp: self, retval: std::collections::HashMap::new() }
             }
         }
@@ -108,6 +111,9 @@ pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         }
 
         // @TODO add impl block that adds mock functionality
+        // @TODO this hashmap is mapping call to ARG values,
+        // not call to RETURN value. We only care about args when generating the mock
+        // function.
         struct MockMethod<'a, T: 'a, U> {
             imp: &'a mut MockImpl<T>,
             retval: std::collections::HashMap<usize, U>,
@@ -139,8 +145,13 @@ pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 self
             }
 
-            pub fn set_result(mut self, tuple: U) -> Self {
-                self.retval.insert(self.imp.call_num, tuple);
+            pub fn set_result(mut self, retval: U) -> Self {
+                self.retval.insert(self.imp.call_num, retval);
+                self
+            }
+
+            pub fn when<F>(mut self, _: F) -> Self
+                where F: FnOnce() -> bool {
                 self
             }
         }
