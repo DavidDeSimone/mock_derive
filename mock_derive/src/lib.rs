@@ -95,7 +95,7 @@ pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         methods = quote! {
             #methods
             pub fn #ident(&mut self) -> MockMethod<T, #tuple_type> {
-                MockMethod { imp: self, retval: Vec::new() }
+                MockMethod { imp: self, retval: std::collections::HashMap::new() }
             }
         }
     }    
@@ -109,8 +109,8 @@ pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
 
         // @TODO add impl block that adds mock functionality
         struct MockMethod<'a, T: 'a, U> {
-            pub imp: &'a mut MockImpl<T>,
-            retval: Vec<U>,
+            imp: &'a mut MockImpl<T>,
+            retval: std::collections::HashMap<usize, U>,
         }
 
         impl<T> MockImpl<T> {
@@ -131,7 +131,6 @@ pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
 
             pub fn nth_call(mut self, num: usize) -> Self {
-                self.retval.reserve(num);
                 self.imp.call_num = num;
                 self
             }
@@ -139,7 +138,7 @@ pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             // @TODO U in this case will be a tuple of results, that will be unpacked
             // and applied to a function. We need to figure out how to store this tuple
             pub fn set_result(mut self, tuple: U) -> Self {
-                self.retval[self.imp.call_num] = tuple;
+                self.retval.insert(self.imp.call_num, tuple);
                 self
             }
         }
