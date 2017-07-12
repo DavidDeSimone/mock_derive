@@ -103,8 +103,8 @@ pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let stream = quote! {
         // @TODO make unique name
         struct MockImpl<T> {
-            fallback: T,
-            call_num: usize,
+            fallback: Option<T>,
+            call_num: usize
         }
 
         // @TODO add impl block that adds mock functionality
@@ -116,8 +116,12 @@ pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         impl<T> MockImpl<T> {
             #methods
 
-            pub fn new(t: T) -> MockImpl<T> {
-                MockImpl { fallback: t, call_num: 0 }
+            pub fn new() -> MockImpl<T> {
+                MockImpl { fallback: None, call_num: 0 }
+            }
+
+            pub fn set_fallback(&mut self, t: T) {
+                self.fallback = Some(t);
             }
         }
 
@@ -135,8 +139,6 @@ pub fn mock(attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 self
             }
 
-            // @TODO U in this case will be a tuple of results, that will be unpacked
-            // and applied to a function. We need to figure out how to store this tuple
             pub fn set_result(mut self, tuple: U) -> Self {
                 self.retval.insert(self.imp.call_num, tuple);
                 self

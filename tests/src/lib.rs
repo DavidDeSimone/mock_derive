@@ -55,10 +55,9 @@ impl HelloWorld for Foo {
    let mut mock = MockHelloWorld::new();
    mock.method_bar()
        .first_call()
-       .set_result(Ok(13))
+       .set_result((Ok(13)))
        .second_call()
-       .set_result(None)
-       .create();
+       .set_result((None));
 
    // Will fall back to Foo's implementation
    // if method is not mocked
@@ -66,14 +65,15 @@ impl HelloWorld for Foo {
    let mut mock = MockHelloWorld::new(foo);
    mock.method_hello_world()
        .first_call()
-       .set_result(20)
-       .create();
+       .set_result((20));
 
    let mock_two = FooMock::new_mock(...)
                   .method_baz()
                   .nth_call(15)
                   .set_result(2)
                   .create();
+
+  let mock_three = FooMock::new
 
 
   mock.bar(); // returns Ok(13)
@@ -84,7 +84,8 @@ impl HelloWorld for Foo {
 #[test]
 fn it_works() {
     let foo = Foo::new();
-    let mut mock = MockImpl::new(foo);
+    let mut mock = MockImpl::new();
+    mock.set_fallback(foo);
     mock.method_hello_world()
         .first_call()
         .set_result(());
