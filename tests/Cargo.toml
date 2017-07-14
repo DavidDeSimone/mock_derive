@@ -5,3 +5,4 @@ authors = ["DavidDeSimone <djd231@scarletmail.rutgers.edu>"]
 
 [dependencies]
 mock_derive = { path = "../mock_derive" }
+lazy_static = "0.2"

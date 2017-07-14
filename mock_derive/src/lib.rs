@@ -75,6 +75,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
 
     let impl_name = concat_idents("Mock", trait_name.as_str());
     let mock_method_name = concat_idents("MockMethodFor", trait_name.as_str());
+    let map_name = concat_idents("MockMap", trait_name.as_str());
     
     // For each method in the Impl block, we create a "method_" name function that returns an
     // object to mutate
@@ -137,6 +138,14 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     }    
 
     let stream = quote! {
+        // In order to support things like having this nice API in const methods, we
+        // use lazy static to generate a global hashmap to keep track of state.
+        lazy_static! {
+            static ref #map_name : std::sync::Mutex<std::collections::HashMap<u32, u32>> = {
+                std::sync::Mutex::new(std::collections::HashMap::new())
+            };
+        }
+        
         struct #impl_name<T> {
             fallback: Option<T>,
             #fields

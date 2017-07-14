@@ -25,8 +25,11 @@ SOFTWARE.
 #![feature(proc_macro)]
 #[macro_use]
 extern crate mock_derive;
+#[macro_use]
+extern crate lazy_static;
 
 use mock_derive::mock;
+
 
 struct Foo {
     x: i32,
