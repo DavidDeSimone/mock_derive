@@ -41,12 +41,17 @@ impl Foo {
 
 trait HelloWorld {
     fn hello_world(&self);
+    fn foo(&self) -> u32;
 }
 
 #[mock]
 impl HelloWorld for Foo {
     fn hello_world(&self) {
         println!("Hello World!");
+    }
+
+    fn foo(&self) -> u32 {
+        1
     }
 }
 
@@ -79,7 +84,7 @@ impl HelloWorld for Foo {
 #[test]
 fn it_works() {
     let foo = Foo::new();
-    let mut mock = MockImpl::new();
+    let mut mock = MockImplHelloWorld::new();
     mock.set_fallback(foo);
     let method = mock.method_hello_world()
         .first_call()
@@ -88,5 +93,12 @@ fn it_works() {
 
     mock.set_hello_world(method);
     mock.hello_world();
+
+    let foo_method = mock.method_foo()
+        .first_call()
+        .set_result((3));
+
+    mock.set_foo(foo_method);
+    mock.foo();
 }
 

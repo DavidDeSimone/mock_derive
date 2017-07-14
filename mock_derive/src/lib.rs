@@ -39,10 +39,15 @@ struct Function {
     pub decl: syn::FnDecl
 }
 
-fn parse_impl(item: &syn::Item) -> Vec<Function> {
+fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens) {
     let mut result = Vec::new();
+    let result_tok;
     match item.node {
-        syn::ItemKind::Impl(_unsafety, _impl_token, ref _generics, ref _trait_, ref _self_ty, ref items) => {
+        syn::ItemKind::Impl(_unsafety, _impl_token, ref _generics, ref trait_, ref _self_ty, ref items) => {
+            // @TODO trait_name will include things like foo::bar::baz
+            // which won't compile. We will need to parse and handle this
+            let trait_name = trait_.clone().unwrap(); // @TODO dont raw unwrap.
+            result_tok = quote! { #trait_name };
             for item in items {
                 match item.node {
                     syn::ImplItemKind::Method(ref sig, ref _block) => {
@@ -55,17 +60,20 @@ fn parse_impl(item: &syn::Item) -> Vec<Function> {
         _ => { panic!("#[mock] must be applied to an Impl statement."); }
     };
 
-    result
+    (result, result_tok)
 }
 
 #[proc_macro_attribute]
 pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let impl_item = syn::parse_item(&impl_ts.to_string()).unwrap();
 
-    let fns = parse_impl(&impl_item);
+    let (fns, trait_name) = parse_impl(&impl_item);
     let mut methods = quote::Tokens::new();
     let mut fields = quote::Tokens::new();
     let mut ctor = quote::Tokens::new();
+
+    let impl_name = concat_idents("MockImpl", trait_name.as_str());
+    let mock_method_name = concat_idents("MockMethod", trait_name.as_str());
     
     // For each method in the Impl block, we create a "method_" name function that returns an
     // object to mutate
@@ -93,18 +101,18 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         methods = quote! {
             #methods
             
-            pub fn #ident(&mut self) -> MockMethod<#return_type> {
-                MockMethod { call_num: 0, current_num: 0, retval: std::collections::HashMap::new() }
+            pub fn #ident(&mut self) -> #mock_method_name<#return_type> {
+                #mock_method_name { call_num: 0, current_num: 0, retval: std::collections::HashMap::new() }
             }
 
-            pub fn #setter(&mut self, method: MockMethod<#return_type>) {
+            pub fn #setter(&mut self, method: #mock_method_name<#return_type>) {
                 self.#name_stream = Some(method);
             }
         };
 
         fields = quote! {
             #fields
-            #name_stream : Option<MockMethod<#return_type>> , 
+            #name_stream : Option<#mock_method_name<#return_type>> , 
         };
 
         ctor = quote! {
@@ -112,26 +120,24 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         };
         
     }    
-    
+
     let stream = quote! {
-        // @TODO make unique name
-        struct MockImpl<T> {
+        struct #impl_name<T> {
             fallback: Option<T>,
             #fields
         }
 
-        // @TODO add impl block that adds mock functionality
-        struct MockMethod<U> {
+        struct #mock_method_name<U> {
             call_num: usize,
             current_num: usize,
             retval: std::collections::HashMap<usize, U>,
         }
 
-        impl<T> MockImpl<T> {
+        impl<T> #impl_name<T> {
             #methods
 
-            pub fn new() -> MockImpl<T> {
-                MockImpl { fallback: None, #ctor }
+            pub fn new() -> #impl_name<T> {
+                #impl_name { fallback: None, #ctor }
             }
 
             pub fn set_fallback(&mut self, t: T) {
@@ -139,7 +145,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
         }
 
-        impl<U> MockMethod<U> {
+        impl<U> #mock_method_name<U> {
             pub fn first_call(mut self) -> Self {
                 self.nth_call(1)
             }
@@ -165,7 +171,6 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 self.retval.remove(&current_num)
             }
 
-            // Have this set a Box value, and set up the logic that will call this function if it exists.
             // @TODO implement
             pub fn when<F>(mut self, _: F) -> Self
                 where F: FnOnce() -> bool {
@@ -173,12 +178,15 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
         }
 
-        // @TODO have this be populated from AST results, not hard coded
         // @TODO make the skeleton of this. It will be looking at the Optional value for
         // self.hello_world.call()
-        impl<T> HelloWorld for MockImpl<T> {
+        impl<T> #trait_name for #impl_name<T> {
             fn hello_world(&self) {
                 println!("World Hello");
+            }
+
+            fn foo(&self) -> u32 {
+                2
             }
         }
     };
