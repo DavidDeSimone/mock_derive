@@ -53,32 +53,27 @@ impl HelloWorld for Foo {
 /* Example of API
    // Any non-specified call will result in a no-op call
    let mut mock = MockHelloWorld::new();
-   mock.method_bar()
+   let method = mock.method_bar()
        .first_call()
        .set_result((Ok(13)))
        .second_call()
        .set_result((None));
+   mock.set_bar(method);
+   mock.bar(); // Returns Ok(13)
+   mock.bar(); // Returns None
 
    // Will fall back to Foo's implementation
    // if method is not mocked
    let foo = Foo::new(...);
-   let mut mock = MockHelloWorld::new(foo);
-   mock.method_hello_world()
+   let mut mock = MockHelloWorld::new();
+   mock.set_fallback(foo); 
+
+   let method = mock.method_hello_world()
        .when(|| true) 
        .set_result((20));
-
-   let mock_two = FooMock::new_mock(...)
-                  .method_baz()
-                  .nth_call(15)
-                  .set_result(2)
-                  .create();
-
-  let mock_three = FooMock::new
-
-
-  mock.bar(); // returns Ok(13)
-  mock.bar(); // Returns None
-  mock.baz(); // Falls to 'baz' impl
+   mock.set_hello_world(method); 
+   mock.hello_world(); // Returns 20
+   mock.other_method(); // Calls foo's version of other_method
  
 */
 #[test]
@@ -86,12 +81,12 @@ fn it_works() {
     let foo = Foo::new();
     let mut mock = MockImpl::new();
     mock.set_fallback(foo);
-    mock.method_hello_world()
+    let method = mock.method_hello_world()
         .first_call()
         .when(|| true)
         .set_result(());
 
-
+    mock.set_hello_world(method);
     mock.hello_world();
 }
 

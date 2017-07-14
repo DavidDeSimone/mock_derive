@@ -74,6 +74,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         let decl = fnc.decl.inputs;
         let name_stream = quote! { #name };
         let ident = concat_idents("method_", name_stream.as_str());
+        let setter = concat_idents("set_", name_stream.as_str());
         let mut args = Vec::new();
         for input in decl {
             match input {
@@ -91,19 +92,23 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         
         methods = quote! {
             #methods
-            // @TODO this needs to give out a mutable reference instead of creating one
+            
             pub fn #ident(&mut self) -> MockMethod<#return_type> {
                 MockMethod { call_num: 0, retval: std::collections::HashMap::new() }
+            }
+
+            pub fn #setter(&mut self, method: MockMethod<#return_type>) {
+                self.#name_stream = Some(method);
             }
         };
 
         fields = quote! {
             #fields
-            #name_stream : MockMethod<#return_type> , 
+            #name_stream : Option<MockMethod<#return_type>> , 
         };
 
         ctor = quote! {
-            #ctor #name_stream : MockMethod { call_num: 0, retval: std::collections::HashMap::new() }, 
+            #ctor #name_stream : None, 
         };
         
     }    
@@ -153,6 +158,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
 
             // Have this set a Box value, and set up the logic that will call this function if it exists.
+            // @TODO implement
             pub fn when<F>(mut self, _: F) -> Self
                 where F: FnOnce() -> bool {
                 self
