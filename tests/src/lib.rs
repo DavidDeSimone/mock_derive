@@ -28,7 +28,7 @@ extern crate mock_derive;
 
 use mock_derive::mock;
 
-pub struct Foo {
+struct Foo {
     x: i32,
     y: i32,
 }
@@ -56,7 +56,6 @@ impl HelloWorld for Foo {
 }
 
 /* Example of API
-   // Any non-specified call will result in a no-op call
    let mut mock = MockHelloWorld::new();
    let method = mock.method_bar()
        .first_call()
@@ -84,7 +83,7 @@ impl HelloWorld for Foo {
 #[test]
 fn it_works() {
     let foo = Foo::new();
-    let mut mock = MockImplHelloWorld::new();
+    let mut mock = MockHelloWorld::new();
     mock.set_fallback(foo);
     let method = mock.method_hello_world()
         .first_call()

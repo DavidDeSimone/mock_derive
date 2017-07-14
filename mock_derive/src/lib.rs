@@ -71,9 +71,10 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let mut methods = quote::Tokens::new();
     let mut fields = quote::Tokens::new();
     let mut ctor = quote::Tokens::new();
+    let mut method_impls = quote::Tokens::new();
 
-    let impl_name = concat_idents("MockImpl", trait_name.as_str());
-    let mock_method_name = concat_idents("MockMethod", trait_name.as_str());
+    let impl_name = concat_idents("Mock", trait_name.as_str());
+    let mock_method_name = concat_idents("MockMethodFor", trait_name.as_str());
     
     // For each method in the Impl block, we create a "method_" name function that returns an
     // object to mutate
@@ -97,12 +98,16 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             syn::FunctionRetTy::Default => { quote! { () } },
             syn::FunctionRetTy::Ty(ref ty) => { quote! { #ty } },
         };
-        
+
+        // This is getting a litte confusing with all of the tokens here.
+        // This is defining the methods for #ident, which is generated per method of the impl trait.
+        // we generate a getter called method_foo, and a setter called set_foo.
+        // These methods will be put on the MockImpl struct.
         methods = quote! {
             #methods
             
             pub fn #ident(&mut self) -> #mock_method_name<#return_type> {
-                #mock_method_name { call_num: 0, current_num: 0, retval: std::collections::HashMap::new() }
+                #mock_method_name { call_num: 1, current_num: 1, retval: std::collections::HashMap::new() }
             }
 
             pub fn #setter(&mut self, method: #mock_method_name<#return_type>) {
@@ -110,13 +115,23 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
         };
 
+        // The fields on the MockImpl struct.
         fields = quote! {
             #fields
             #name_stream : Option<#mock_method_name<#return_type>> , 
         };
 
+        // The values that we will set in the ctor for the above defined 'fields' of MockImpl
         ctor = quote! {
             #ctor #name_stream : None, 
+        };
+
+        // @TODO proper arg handling.
+        // @TODO need to handle if there is no return value
+        method_impls = quote! {
+            #method_impls
+            fn #name_stream(&self) -> #return_type {
+            }
         };
         
     }    
