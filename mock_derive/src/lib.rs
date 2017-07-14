@@ -94,7 +94,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             #methods
             
             pub fn #ident(&mut self) -> MockMethod<#return_type> {
-                MockMethod { call_num: 0, retval: std::collections::HashMap::new() }
+                MockMethod { call_num: 0, current_num: 0, retval: std::collections::HashMap::new() }
             }
 
             pub fn #setter(&mut self, method: MockMethod<#return_type>) {
@@ -123,6 +123,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         // @TODO add impl block that adds mock functionality
         struct MockMethod<U> {
             call_num: usize,
+            current_num: usize,
             retval: std::collections::HashMap<usize, U>,
         }
 
@@ -157,6 +158,13 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 self
             }
 
+            // @TODO need to handle 'when' case
+            pub fn call(&mut self) -> Option<U> {
+                let current_num = self.current_num;
+                self.current_num += 1;
+                self.retval.remove(&current_num)
+            }
+
             // Have this set a Box value, and set up the logic that will call this function if it exists.
             // @TODO implement
             pub fn when<F>(mut self, _: F) -> Self
@@ -166,6 +174,8 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         }
 
         // @TODO have this be populated from AST results, not hard coded
+        // @TODO make the skeleton of this. It will be looking at the Optional value for
+        // self.hello_world.call()
         impl<T> HelloWorld for MockImpl<T> {
             fn hello_world(&self) {
                 println!("World Hello");
