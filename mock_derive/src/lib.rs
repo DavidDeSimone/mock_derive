@@ -64,6 +64,8 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
 
     let fns = parse_impl(&impl_item);
     let mut methods = quote::Tokens::new();
+    let mut fields = quote::Tokens::new();
+    let mut ctor = quote::Tokens::new();
     
     // For each method in the Impl block, we create a "method_" name function that returns an
     // object to mutate
@@ -82,14 +84,6 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
         }
 
-        let _ = match args.len() {
-            0 => { quote!{ () } },
-            1 => { quote!{ (#args[0]) } },
-            2 => { quote!{ (#args[0], #args[1]) } },
-            3 => { quote!{ (#args[0], #args[1], #args[2]) } },
-            _ => { panic!("Unexpected number of args, max is 3") }
-        };
-
         let return_type = match fnc.decl.output {
             syn::FunctionRetTy::Default => { quote! { () } },
             syn::FunctionRetTy::Ty(ref ty) => { quote! { #ty } },
@@ -97,25 +91,33 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         
         methods = quote! {
             #methods
-            pub fn #ident(&mut self) -> MockMethod<T, #return_type> {
-                MockMethod { imp: self, retval: std::collections::HashMap::new() }
+            // @TODO this needs to give out a mutable reference instead of creating one
+            pub fn #ident(&mut self) -> MockMethod<#return_type> {
+                MockMethod { call_num: 0, retval: std::collections::HashMap::new() }
             }
-        }
+        };
+
+        fields = quote! {
+            #fields
+            #name_stream : MockMethod<#return_type> , 
+        };
+
+        ctor = quote! {
+            #ctor #name_stream : MockMethod { call_num: 0, retval: std::collections::HashMap::new() }, 
+        };
+        
     }    
     
     let stream = quote! {
         // @TODO make unique name
         struct MockImpl<T> {
             fallback: Option<T>,
-            call_num: usize
+            #fields
         }
 
         // @TODO add impl block that adds mock functionality
-        // @TODO this hashmap is mapping call to ARG values,
-        // not call to RETURN value. We only care about args when generating the mock
-        // function.
-        struct MockMethod<'a, T: 'a, U> {
-            imp: &'a mut MockImpl<T>,
+        struct MockMethod<U> {
+            call_num: usize,
             retval: std::collections::HashMap<usize, U>,
         }
 
@@ -123,7 +125,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             #methods
 
             pub fn new() -> MockImpl<T> {
-                MockImpl { fallback: None, call_num: 0 }
+                MockImpl { fallback: None, #ctor }
             }
 
             pub fn set_fallback(&mut self, t: T) {
@@ -131,7 +133,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
         }
 
-        impl<'a, T: 'a, U> MockMethod<'a, T, U> {
+        impl<U> MockMethod<U> {
             pub fn first_call(mut self) -> Self {
                 self.nth_call(1)
             }
@@ -141,21 +143,23 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
 
             pub fn nth_call(mut self, num: usize) -> Self {
-                self.imp.call_num = num;
+                self.call_num = num;
                 self
             }
 
             pub fn set_result(mut self, retval: U) -> Self {
-                self.retval.insert(self.imp.call_num, retval);
+                self.retval.insert(self.call_num, retval);
                 self
             }
 
+            // Have this set a Box value, and set up the logic that will call this function if it exists.
             pub fn when<F>(mut self, _: F) -> Self
                 where F: FnOnce() -> bool {
                 self
             }
         }
 
+        // @TODO have this be populated from AST results, not hard coded
         impl<T> HelloWorld for MockImpl<T> {
             fn hello_world(&self) {
                 println!("World Hello");
