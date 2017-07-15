@@ -63,12 +63,85 @@ fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens) {
     (result, result_tok)
 }
 
+fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens) {
+    let mut argc = 0;
+    let mut args_with_types = quote::Tokens::new();
+    let mut args_with_no_self_no_types = quote::Tokens::new();
+    let arg_names = vec![quote!{a}, quote!{b}, quote!{c}, quote!{d}, quote!{e}, quote!{f}, quote!{g}, quote!{h}];
+    for input in decl {
+        match input {
+            syn::FnArg::SelfRef(_lifetime, mutability) => {
+                if mutability == syn::Mutability::Mutable {
+                    args_with_types = quote! {
+                        &mut self
+                    };
+                } else {
+                    args_with_types = quote! {
+                        &self
+                    };
+                }
+                
+                argc += 1;
+            },
+            syn::FnArg::SelfValue(mutability) => {
+                if mutability == syn::Mutability::Mutable {
+                    args_with_types = quote! {
+                        &mut self
+                    };
+                } else {
+                    args_with_types = quote! {
+                        &self
+                    };
+                }
+
+                argc += 1;
+            },
+            syn::FnArg::Captured(_pat, ty) => {
+                if argc > arg_names.len() {
+                    panic!("You are attempting to mock a function with a number of arguments larger then the maximum number of supported arguments");
+                }
+                
+                let tok = arg_names[argc].clone();
+                args_with_types = quote! {
+                    #args_with_types, #tok : #ty 
+                };
+                if argc == 1 {
+                    args_with_no_self_no_types = quote! {
+                        #tok
+                    }
+                } else {
+                    args_with_no_self_no_types = quote! {
+                        #args_with_no_self_no_types, #tok
+                    };
+                }
+
+                argc += 1;
+            },
+            _ => {}
+        }
+    }
+
+    (args_with_types, args_with_no_self_no_types)
+}
+
+fn parse_return_type(output: syn::FunctionRetTy) -> (bool, quote::Tokens) {
+    // @TODO if return type if 'Self', then this will choke.
+    match output {
+        syn::FunctionRetTy::Default => {
+            (true, quote! { () })
+        },
+        syn::FunctionRetTy::Ty(ref ty) => {
+            (false, quote! { #ty })
+        },
+    }
+}
+
 #[proc_macro_attribute]
 pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let impl_item = syn::parse_item(&impl_ts.to_string()).unwrap();
 
-    let (fns, trait_name) = parse_impl(&impl_item);
-    let mut methods = quote::Tokens::new();
+    let (trait_functions, trait_name) = parse_impl(&impl_item);
+    let mut mock_impl_methods = quote::Tokens::new();
     let mut fields = quote::Tokens::new();
     let mut ctor = quote::Tokens::new();
     let mut method_impls = quote::Tokens::new();
@@ -78,86 +151,27 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     
     // For each method in the Impl block, we create a "method_" name function that returns an
     // object to mutate
-    for fnc in fns {
-        let name = fnc.name;
-        let decl = fnc.decl.inputs;
+    for function in trait_functions {
+        let name = function.name;
         let name_stream = quote! { #name };
         let ident = concat_idents("method_", name_stream.as_str());
         let setter = concat_idents("set_", name_stream.as_str());
-        let mut argc = 0;
-        let mut args_with_types = quote::Tokens::new();
-        let mut args_with_no_self_no_types = quote::Tokens::new();
-        let arg_names = vec![quote!{a}, quote!{b}, quote!{c}, quote!{d}, quote!{e}, quote!{f}, quote!{g}, quote!{h}];
-        for input in decl {
-            match input {
-                syn::FnArg::SelfRef(_lifetime, mutability) => {
-                    if mutability == syn::Mutability::Mutable {
-                        args_with_types = quote! {
-                            &mut self
-                        };
-                    } else {
-                        args_with_types = quote! {
-                            &self
-                        };
-                    }
-
-                    argc += 1;
-                },
-                syn::FnArg::SelfValue(mutability) => {
-                    if mutability == syn::Mutability::Mutable {
-                        args_with_types = quote! {
-                            &mut self
-                        };
-                    } else {
-                        args_with_types = quote! {
-                            &self
-                        };
-                    }
-
-                    argc += 1;
-                },
-                syn::FnArg::Captured(_pat, ty) => {
-                    let tok = arg_names[argc].clone();
-                    args_with_types = quote! {
-                        #args_with_types, #tok : #ty 
-                    };
-                    if argc == 1 {
-                        args_with_no_self_no_types = quote! {
-                            #tok
-                        }
-                    } else {
-                        args_with_no_self_no_types = quote! {
-                            #args_with_no_self_no_types, #tok
-                        };
-                    }
-
-                    argc += 1;
-                },
-                _ => {}
-            }
-        }
-
-        let no_return;
-        let return_type = match fnc.decl.output {
-            syn::FunctionRetTy::Default => {
-                no_return = true;
-                quote! { () }
-            },
-            syn::FunctionRetTy::Ty(ref ty) => {
-                no_return = false;
-                quote! { #ty }
-            },
-        };
+        let (args_with_types, args_with_no_self_no_types) = parse_args(function.decl.inputs);
+        let (no_return, return_type) = parse_return_type(function.decl.output);
 
         // This is getting a litte confusing with all of the tokens here.
         // This is defining the methods for #ident, which is generated per method of the impl trait.
         // we generate a getter called method_foo, and a setter called set_foo.
         // These methods will be put on the MockImpl struct.
-        methods = quote! {
-            #methods
+        mock_impl_methods = quote! {
+            #mock_impl_methods
             
             pub fn #ident(&mut self) -> #mock_method_name<#return_type> {
-                #mock_method_name { call_num: std::sync::Mutex::new(1), current_num: std::sync::Mutex::new(1), retval: std::sync::Mutex::new(std::collections::HashMap::new()) }
+                #mock_method_name {
+                    call_num: std::sync::Mutex::new(1),
+                    current_num: std::sync::Mutex::new(1),
+                    retval: std::sync::Mutex::new(std::collections::HashMap::new())
+                }
             }
 
             pub fn #setter(&mut self, method: #mock_method_name<#return_type>) {
@@ -262,7 +276,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         }
 
         impl<T> #impl_name<T> where T: #trait_name {
-            #methods
+            #mock_impl_methods
 
             pub fn new() -> #impl_name<T> {
                 #impl_name { fallback: None, #ctor }
