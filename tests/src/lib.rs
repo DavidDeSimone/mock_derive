@@ -35,7 +35,7 @@ struct Foo {
 
 impl Foo {
     pub fn new() -> Foo {
-        Foo { x: 32, y: 32 }
+        Foo { x: 0, y: 0 }
     }
 }
 
@@ -43,6 +43,7 @@ trait HelloWorld {
     fn hello_world(&self);
     fn foo(&self) -> u32;
     fn bar(&self) -> Option<u32>;
+    fn baz(&self, x: i32) -> Foo;
 }
 
 #[mock]
@@ -57,6 +58,10 @@ impl HelloWorld for Foo {
 
     fn bar(&self) -> Option<u32> {
         Some(12)
+    }
+
+    fn baz(&self, x: i32) -> Foo {
+        Foo { x: x, y: x }
     }
 }
 
@@ -100,10 +105,11 @@ fn it_works() {
     mock.hello_world();
 
     let foo_method = mock.method_foo()
-        .first_call()
-        .set_result(3)
         .second_call()
-        .set_result(4);
+        .set_result(4)
+        .first_call()
+        .set_result(3);
+        
 
     mock.set_foo(foo_method);
     let result = mock.foo();
@@ -118,15 +124,28 @@ fn it_works() {
 
 #[test]
 fn parameter_type_test() {
-    let foo = Foo::new();
-    let mut mock = MockHelloWorld::new();
-    mock.set_fallback(foo);
+    let mut mock = MockHelloWorld::<Foo>::new();
     let method = mock.method_bar()
         .first_call()
-        .set_result(Some(11));
+        .set_result(Some(11))
+        .nth_call(2) // equiv to 'second_call'
+        .set_result(None);
     
     mock.set_bar(method);
 
     let result = mock.bar();
     assert!(result == Some(11));
+    assert!(mock.bar() == None);
+}
+
+#[test]
+fn parameter_gen_test() {
+    let mut mock = MockHelloWorld::<Foo>::new();
+    let method = mock.method_baz()
+        .first_call()
+        .set_result(Foo::new());
+
+    mock.set_baz(method);
+    let result = mock.baz(32);
+    assert!(result.x == 0 && result.y == 0);
 }

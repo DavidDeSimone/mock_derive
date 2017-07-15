@@ -23,7 +23,7 @@ SOFTWARE.
 */
 
 #![feature(proc_macro)]
-#![recursion_limit = "128"]
+#![recursion_limit = "256"]
 
 //#[macro_use]
 extern crate syn;
@@ -84,11 +84,54 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         let name_stream = quote! { #name };
         let ident = concat_idents("method_", name_stream.as_str());
         let setter = concat_idents("set_", name_stream.as_str());
-        let mut args = Vec::new();
+        let mut argc = 0;
+        let mut args_with_types = quote::Tokens::new();
+        let mut args_with_no_self_no_types = quote::Tokens::new();
+        let arg_names = vec![quote!{a}, quote!{b}, quote!{c}, quote!{d}, quote!{e}, quote!{f}, quote!{g}, quote!{h}];
         for input in decl {
             match input {
+                syn::FnArg::SelfRef(_lifetime, mutability) => {
+                    if mutability == syn::Mutability::Mutable {
+                        args_with_types = quote! {
+                            &mut self
+                        };
+                    } else {
+                        args_with_types = quote! {
+                            &self
+                        };
+                    }
+
+                    argc += 1;
+                },
+                syn::FnArg::SelfValue(mutability) => {
+                    if mutability == syn::Mutability::Mutable {
+                        args_with_types = quote! {
+                            &mut self
+                        };
+                    } else {
+                        args_with_types = quote! {
+                            &self
+                        };
+                    }
+
+                    argc += 1;
+                },
                 syn::FnArg::Captured(_pat, ty) => {
-                    args.push(ty);
+                    let tok = arg_names[argc].clone();
+                    args_with_types = quote! {
+                        #args_with_types, #tok : #ty 
+                    };
+                    if argc == 1 {
+                        args_with_no_self_no_types = quote! {
+                            #tok
+                        }
+                    } else {
+                        args_with_no_self_no_types = quote! {
+                            #args_with_no_self_no_types, #tok
+                        };
+                    }
+
+                    argc += 1;
                 },
                 _ => {}
             }
@@ -137,7 +180,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             match self.fallback {
                 Some(ref fallback) => {
                     // Call the fallback
-                    fallback.#name_stream()
+                    fallback.#name_stream(#args_with_no_self_no_types)
                 },
                 
                 None => {
@@ -151,7 +194,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         if no_return {
             method_impls = quote! {
                 #method_impls
-                fn #name_stream(&self) {
+                fn #name_stream(#args_with_types) {
                     // The user has called a method
                     match self.#name_stream.as_ref() {
                         Some(method) => {
@@ -176,7 +219,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         } else {
             method_impls = quote! {
                 #method_impls
-                fn #name_stream(&self) -> #return_type {
+                fn #name_stream(#args_with_types) -> #return_type {
                     match self.#name_stream.as_ref() {
                         Some(method) => {
                             match method.call() {
@@ -203,7 +246,10 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
 
     let stream = quote! {
         #impl_item
-        
+
+        // @TODO we may be able to get rid of the parameter T here,
+        // and instead parameterize the set_fallback method, storing
+        // a box to a #trait_name
         struct #impl_name<T: #trait_name> {
             fallback: Option<T>,
             #fields
@@ -267,6 +313,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 where F: FnOnce() -> bool {
                 self
             }
+
         }
 
         impl<T> #trait_name for #impl_name<T> where T: #trait_name {
