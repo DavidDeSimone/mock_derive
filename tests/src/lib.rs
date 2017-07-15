@@ -23,16 +23,17 @@ SOFTWARE.
 */
 
 #![feature(proc_macro)]
-#[macro_use]
 extern crate mock_derive;
 
 use mock_derive::mock;
 
+#[allow(dead_code)]
 struct Foo {
     x: i32,
     y: i32,
 }
 
+#[allow(dead_code)]
 impl Foo {
     pub fn new() -> Foo {
         Foo { x: 0, y: 0 }
@@ -109,14 +110,14 @@ fn it_works() {
         .set_result(4)
         .first_call()
         .set_result(3);
-        
+
 
     mock.set_foo(foo_method);
     let result = mock.foo();
     assert!(result == 3);
     let result2 = mock.foo();
     assert!(result2 == 4);
-    
+
     // This is a fallback case
     let result3 = mock.foo();
     assert!(result3 == 1);
@@ -130,7 +131,7 @@ fn parameter_type_test() {
         .set_result(Some(11))
         .nth_call(2) // equiv to 'second_call'
         .set_result(None);
-    
+
     mock.set_bar(method);
 
     let result = mock.bar();
@@ -141,9 +142,7 @@ fn parameter_type_test() {
 #[test]
 fn parameter_gen_test() {
     let mut mock = MockHelloWorld::<Foo>::new();
-    let method = mock.method_baz()
-        .first_call()
-        .set_result(Foo::new());
+    let method = mock.method_baz().first_call().set_result(Foo::new());
 
     mock.set_baz(method);
     let result = mock.baz(32);

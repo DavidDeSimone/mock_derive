@@ -166,7 +166,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         mock_impl_methods = quote! {
             #mock_impl_methods
             
-            pub fn #ident(&mut self) -> #mock_method_name<#return_type> {
+            pub fn #ident(&self) -> #mock_method_name<#return_type> {
                 #mock_method_name {
                     call_num: std::sync::Mutex::new(1),
                     current_num: std::sync::Mutex::new(1),
@@ -203,8 +203,6 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
         };
 
-        // @TODO proper arg handling.
-        // @TODO need to handle if there is no return value
         if no_return {
             method_impls = quote! {
                 #method_impls
@@ -264,17 +262,22 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         // @TODO we may be able to get rid of the parameter T here,
         // and instead parameterize the set_fallback method, storing
         // a box to a #trait_name
+        #[allow(dead_code)]
         struct #impl_name<T: #trait_name> {
             fallback: Option<T>,
             #fields
         }
 
+        #[allow(dead_code)]
         struct #mock_method_name<U> {
             call_num: std::sync::Mutex<usize>,
             current_num: std::sync::Mutex<usize>,
             retval: std::sync::Mutex<std::collections::HashMap<usize, U>>,
         }
 
+        // Your mocks may not use all of these functions, so it's fine to allow
+        // dead code in this impl block.
+        #[allow(dead_code)]
         impl<T> #impl_name<T> where T: #trait_name {
             #mock_impl_methods
 
@@ -287,16 +290,17 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
         }
 
+        #[allow(dead_code)]
         impl<U> #mock_method_name<U> {
-            pub fn first_call(mut self) -> Self {
+            pub fn first_call(self) -> Self {
                 self.nth_call(1)
             }
 
-            pub fn second_call(mut self) -> Self {
+            pub fn second_call(self) -> Self {
                 self.nth_call(2)
             }
 
-            pub fn nth_call(mut self, num: usize) -> Self {
+            pub fn nth_call(self, num: usize) -> Self {
                 {
                     let mut value = self.call_num.lock().unwrap();
                     *value = num;
@@ -304,9 +308,9 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 self
             }
 
-            pub fn set_result(mut self, retval: U) -> Self {
+            pub fn set_result(self, retval: U) -> Self {
                 {
-                    let mut call_num = self.call_num.lock().unwrap();
+                    let call_num = self.call_num.lock().unwrap();
                     let mut map = self.retval.lock().unwrap();
                     map.insert(*call_num, retval);
                 }
@@ -323,7 +327,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
 
             // @TODO implement
-            pub fn when<F>(mut self, _: F) -> Self
+            pub fn when<F>(self, _: F) -> Self
                 where F: FnOnce() -> bool {
                 self
             }
