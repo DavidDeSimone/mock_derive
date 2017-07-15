@@ -98,6 +98,7 @@ fn it_works() {
         .set_result((3));
 
     mock.set_foo(foo_method);
-    mock.foo();
+    let result = mock.foo();
+    assert!(result == 3);
 }
 

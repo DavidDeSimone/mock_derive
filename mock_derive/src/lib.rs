@@ -94,8 +94,9 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
         }
 
+        let mut no_return = false;
         let return_type = match fnc.decl.output {
-            syn::FunctionRetTy::Default => { quote! { () } },
+            syn::FunctionRetTy::Default => { no_return = true; quote! { () } },
             syn::FunctionRetTy::Ty(ref ty) => { quote! { #ty } },
         };
 
@@ -107,7 +108,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             #methods
             
             pub fn #ident(&mut self) -> #mock_method_name<#return_type> {
-                #mock_method_name { call_num: 1, current_num: 1, retval: std::collections::HashMap::new() }
+                #mock_method_name { call_num: std::sync::Mutex::new(1), current_num: std::sync::Mutex::new(1), retval: std::sync::Mutex::new(std::collections::HashMap::new()) }
             }
 
             pub fn #setter(&mut self, method: #mock_method_name<#return_type>) {
@@ -126,33 +127,43 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             #ctor #name_stream : None, 
         };
 
+
+        if no_return {
+            method_impls = quote! {
+                #method_impls
+                fn #name_stream(&self) {
+                }
+            };
+        } else {
+            method_impls = quote! {
+                #method_impls
+                fn #name_stream(&self) -> #return_type {
+                }
+            };
+        }
         // @TODO proper arg handling.
         // @TODO need to handle if there is no return value
-        method_impls = quote! {
-            #method_impls
-            fn #name_stream(&self) -> #return_type {
-            }
-        };
         
     }    
 
     let stream = quote! {
         struct #impl_name<T> {
             fallback: Option<T>,
+            mtx: std::sync::Mutex<u8>,
             #fields
         }
 
         struct #mock_method_name<U> {
-            call_num: usize,
-            current_num: usize,
-            retval: std::collections::HashMap<usize, U>,
+            call_num: std::sync::Mutex<usize>,
+            current_num: std::sync::Mutex<usize>,
+            retval: std::sync::Mutex<std::collections::HashMap<usize, U>>,
         }
 
         impl<T> #impl_name<T> {
             #methods
 
             pub fn new() -> #impl_name<T> {
-                #impl_name { fallback: None, #ctor }
+                #impl_name { fallback: None, mtx: std::sync::Mutex::new(0), #ctor }
             }
 
             pub fn set_fallback(&mut self, t: T) {
@@ -170,20 +181,29 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
 
             pub fn nth_call(mut self, num: usize) -> Self {
-                self.call_num = num;
+                {
+                    let mut value = self.call_num.lock().unwrap();
+                    *value = num;
+                }
                 self
             }
 
             pub fn set_result(mut self, retval: U) -> Self {
-                self.retval.insert(self.call_num, retval);
+                {
+                    let mut call_num = self.call_num.lock().unwrap();
+                    let mut map = self.retval.lock().unwrap();
+                    map.insert(*call_num, retval);
+                }
                 self
             }
 
             // @TODO need to handle 'when' case
-            pub fn call(&mut self) -> Option<U> {
-                let current_num = self.current_num;
-                self.current_num += 1;
-                self.retval.remove(&current_num)
+            pub fn call(&self) -> Option<U> {
+                let mut value = self.current_num.lock().unwrap();
+                let current_num = *value;
+                *value += 1;
+                let mut map = self.retval.lock().unwrap();
+                map.remove(&current_num)
             }
 
             // @TODO implement
@@ -197,11 +217,14 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         // self.hello_world.call()
         impl<T> #trait_name for #impl_name<T> {
             fn hello_world(&self) {
-                println!("World Hello");
+                println!("World Hello");                
             }
 
             fn foo(&self) -> u32 {
-                2
+                {
+                    *self.mtx.lock().unwrap() = 3;
+                }
+                *self.mtx.lock().unwrap() as u32
             }
         }
     };
