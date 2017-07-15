@@ -94,10 +94,16 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
         }
 
-        let mut no_return = false;
+        let no_return;
         let return_type = match fnc.decl.output {
-            syn::FunctionRetTy::Default => { no_return = true; quote! { () } },
-            syn::FunctionRetTy::Ty(ref ty) => { quote! { #ty } },
+            syn::FunctionRetTy::Default => {
+                no_return = true;
+                quote! { () }
+            },
+            syn::FunctionRetTy::Ty(ref ty) => {
+                no_return = false;
+                quote! { #ty }
+            },
         };
 
         // This is getting a litte confusing with all of the tokens here.
@@ -128,28 +134,49 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         };
 
 
+        // @TODO proper arg handling.
+        // @TODO need to handle if there is no return value
         if no_return {
             method_impls = quote! {
                 #method_impls
                 fn #name_stream(&self) {
+                    // The user has called a method
+                    match self.#name_stream.as_ref() {
+                        Some(method) => {
+                            
+                        },
+
+                        None => {
+                            // Check if there is a fallback
+                            match self.fallback {
+                                Some(ref fallback) => {
+                                    // Call the fallback
+                                    fallback.#name_stream();
+                                },
+
+                                None => {
+                                    panic!("Called method without either a fallback, or a set result");
+                                }
+                            }
+                        }
+                    }
                 }
             };
         } else {
             method_impls = quote! {
                 #method_impls
                 fn #name_stream(&self) -> #return_type {
+                    3
                 }
             };
         }
-        // @TODO proper arg handling.
-        // @TODO need to handle if there is no return value
-        
     }    
 
     let stream = quote! {
-        struct #impl_name<T> {
+        #impl_item
+        
+        struct #impl_name<T: #trait_name> {
             fallback: Option<T>,
-            mtx: std::sync::Mutex<u8>,
             #fields
         }
 
@@ -159,11 +186,11 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             retval: std::sync::Mutex<std::collections::HashMap<usize, U>>,
         }
 
-        impl<T> #impl_name<T> {
+        impl<T> #impl_name<T> where T: #trait_name {
             #methods
 
             pub fn new() -> #impl_name<T> {
-                #impl_name { fallback: None, mtx: std::sync::Mutex::new(0), #ctor }
+                #impl_name { fallback: None, #ctor }
             }
 
             pub fn set_fallback(&mut self, t: T) {
@@ -215,17 +242,8 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
 
         // @TODO make the skeleton of this. It will be looking at the Optional value for
         // self.hello_world.call()
-        impl<T> #trait_name for #impl_name<T> {
-            fn hello_world(&self) {
-                println!("World Hello");                
-            }
-
-            fn foo(&self) -> u32 {
-                {
-                    *self.mtx.lock().unwrap() = 3;
-                }
-                *self.mtx.lock().unwrap() as u32
-            }
+        impl<T> #trait_name for #impl_name<T> where T: #trait_name {
+            #method_impls
         }
     };
 
