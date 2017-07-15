@@ -7,7 +7,7 @@ In traditional OO languages, mocking in usually based around inheritence, or a m
 
 ## Examples
 Say we have the following code: 
-```
+``` rust
 #![feature(proc_macro)]
 extern crate mock_derive;
 
@@ -51,8 +51,8 @@ impl HelloWorld for Foo {
 }
 ```
 You'll notice that we have included a #[mock] derective above our impl block. This will generate code that we can use for testing. For example, we can write the following test functions:
-
-```
+ 
+``` rust
 #[test]
 fn it_works() {
     let foo = Foo::new();
@@ -60,7 +60,6 @@ fn it_works() {
     mock.set_fallback(foo); // If a behavior isn't specified, we will fall back to this object's behavior.
     let method = mock.method_hello_world()
         .first_call()
-        .when(|| true)
         .set_result(());
 
     mock.set_hello_world(method); // Due to Rust's ownership model, we will need to set our mock method
