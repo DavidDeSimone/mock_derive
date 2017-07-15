@@ -42,6 +42,7 @@ impl Foo {
 trait HelloWorld {
     fn hello_world(&self);
     fn foo(&self) -> u32;
+    fn bar(&self) -> Option<u32>;
 }
 
 #[mock]
@@ -53,15 +54,19 @@ impl HelloWorld for Foo {
     fn foo(&self) -> u32 {
         1
     }
+
+    fn bar(&self) -> Option<u32> {
+        Some(12)
+    }
 }
 
 /* Example of API
    let mut mock = MockHelloWorld::new();
    let method = mock.method_bar()
        .first_call()
-       .set_result((Ok(13)))
+       .set_result(Ok(13))
        .second_call()
-       .set_result((None));
+       .set_result(None);
    mock.set_bar(method);
    mock.bar(); // Returns Ok(13)
    mock.bar(); // Returns None
@@ -79,7 +84,8 @@ impl HelloWorld for Foo {
    mock.hello_world(); // Returns 20
    mock.other_method(); // Calls foo's version of other_method
  
-*/
+ */
+
 #[test]
 fn it_works() {
     let foo = Foo::new();
@@ -95,10 +101,32 @@ fn it_works() {
 
     let foo_method = mock.method_foo()
         .first_call()
-        .set_result((3));
+        .set_result(3)
+        .second_call()
+        .set_result(4);
 
     mock.set_foo(foo_method);
     let result = mock.foo();
     assert!(result == 3);
+    let result2 = mock.foo();
+    assert!(result2 == 4);
+    
+    // This is a fallback case
+    let result3 = mock.foo();
+    assert!(result3 == 1);
 }
 
+#[test]
+fn parameter_type_test() {
+    let foo = Foo::new();
+    let mut mock = MockHelloWorld::new();
+    mock.set_fallback(foo);
+    let method = mock.method_bar()
+        .first_call()
+        .set_result(Some(11));
+    
+    mock.set_bar(method);
+
+    let result = mock.bar();
+    assert!(result == Some(11));
+}

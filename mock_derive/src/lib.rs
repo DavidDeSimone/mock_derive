@@ -133,6 +133,18 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             #ctor #name_stream : None, 
         };
 
+        let fallback = quote! {
+            match self.fallback {
+                Some(ref fallback) => {
+                    // Call the fallback
+                    fallback.#name_stream()
+                },
+                
+                None => {
+                    panic!("Called method without either a fallback, or a set result");
+                }
+            }
+        };
 
         // @TODO proper arg handling.
         // @TODO need to handle if there is no return value
@@ -143,21 +155,20 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                     // The user has called a method
                     match self.#name_stream.as_ref() {
                         Some(method) => {
-                            
+                            match method.call() {
+                                Some(_) => {
+                                    // The mock has completed its duty.
+                                },
+
+                                None => {
+                                    #fallback;
+                                }
+                            }
                         },
 
                         None => {
                             // Check if there is a fallback
-                            match self.fallback {
-                                Some(ref fallback) => {
-                                    // Call the fallback
-                                    fallback.#name_stream();
-                                },
-
-                                None => {
-                                    panic!("Called method without either a fallback, or a set result");
-                                }
-                            }
+                            #fallback;
                         }
                     }
                 }
@@ -166,7 +177,25 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             method_impls = quote! {
                 #method_impls
                 fn #name_stream(&self) -> #return_type {
-                    3
+                    match self.#name_stream.as_ref() {
+                        Some(method) => {
+                            match method.call() {
+                                Some(retval) => {
+                                    // The mock has completed its duty.
+                                    retval
+                                },
+
+                                None => {
+                                    #fallback
+                                }
+                            }
+                        },
+
+                        None => {
+                            // Check if there is a fallback
+                            #fallback
+                        }
+                    }
                 }
             };
         }
@@ -240,8 +269,6 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
         }
 
-        // @TODO make the skeleton of this. It will be looking at the Optional value for
-        // self.hello_world.call()
         impl<T> #trait_name for #impl_name<T> where T: #trait_name {
             #method_impls
         }
