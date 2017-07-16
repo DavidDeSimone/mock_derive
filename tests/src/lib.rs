@@ -91,11 +91,10 @@ impl HelloWorld for Foo {
    let mut mock = MockHelloWorld::new();
    mock.set_fallback(foo); 
 
-   let method = mock.method_hello_world()
-       .when(|| true) 
-       .set_result((20));
-   mock.set_hello_world(method); 
-   mock.hello_world(); // Returns 20
+   let method = mock.method_foo()
+       .return_result_of(|| 20);
+   mock.set_foo(method); 
+   mock.foo(); // Returns 20
    mock.other_method(); // Calls foo's version of other_method
  
  */

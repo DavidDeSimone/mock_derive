@@ -109,11 +109,27 @@ fn parameter_type_test() {
 #[test]
 fn parameter_gen_test() {
     let mut mock = MockHelloWorld::new();
-    let method = mock.method_baz().first_call().set_result(Foo::new());
+    let method = mock.method_baz()
+        .first_call()
+	.set_result(Foo::new());
 
     mock.set_baz(method);
     let result = mock.baz(32);
     assert!(result.x == 0 && result.y == 0);
+}
+
+// You can also pass in a lambda to return a value. This can be used to return a value
+// an infinite number of times
+#[test]
+fn return_result_of() {
+    let x = Some(12);
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_bar()
+        .return_result_of(move || x);
+
+    mock.set_bar(method);
+    assert!(mock.bar() == Some(12));
+    assert!(mock.bar() == Some(12));
 }
 
 ```
