@@ -2,6 +2,8 @@ Mockitol is an easy to setup, rich mocking library for the Rust programming lang
 
 As a friendly note, mockitol is not yet a 1.0 crate, and is still under heavy development. As such, you may find several real world use cases that are not yet supported. If you find such a case, please open an issue and we will look at it as soon as possible.
 
+Currently, mockitol requires you to be running nightly Rust. This will hopefully change in the future, once proc macros are stable.
+
 ## How mockitol is different then previous mocking librarys in other languages.
 In traditional OO languages, mocking in usually based around inheritence, or a mix of method replacement in more dyanmic languages. You make a `Foo` from a mock factory, define the behavior of that `Foo`, and pass it to functions expecting a `Foo`. Rust does not have traditional inheritence, meaning that *only a Foo is a Foo*. Mockitol encourages Implementation Mocking. This means that you will derive your mock for a trait. You will pass that mock to methods expecting something that implements that trait, and you will be able to control the behavior of that mock, similar to other mocking libs you may have worked with in the past.
 
@@ -114,8 +116,10 @@ fn parameter_gen_test() {
     assert!(result.x == 0 && result.y == 0);
 }
 
-
 ```
+
+## TESTING
+There are some tests which double as examples in the tests/ directory. cd into that directory and run `cargo test`. 
 
 ## CONTRIBUTING
 Anyone is welcome to contribute! If you have an addition/bug fix that you would like to contribute, just open a PR and it will be looked at. Work in Progress (WIP) PRs are also welcome. Just include [WIP] in the name of the PR.
