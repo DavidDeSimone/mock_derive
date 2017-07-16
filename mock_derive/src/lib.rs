@@ -83,11 +83,11 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens) {
             syn::FnArg::SelfValue(mutability) => {
                 if mutability == syn::Mutability::Mutable {
                     args_with_types = quote! {
-                        &mut self
+                        mut self
                     };
                 } else {
                     args_with_types = quote! {
-                        &self
+                        self
                     };
                 }
 
@@ -122,7 +122,6 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens) {
 }
 
 fn parse_return_type(output: syn::FunctionRetTy) -> (bool, quote::Tokens) {
-    // @TODO if return type if 'Self', then this will choke.
     match output {
         syn::FunctionRetTy::Default => {
             (true, quote! { () })
