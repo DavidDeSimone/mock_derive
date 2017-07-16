@@ -27,8 +27,6 @@ extern crate mock_derive;
 
 use mock_derive::mock;
 
-mod generic_tests;
-
 #[allow(dead_code)]
 struct Foo {
     x: i32,
@@ -157,9 +155,7 @@ fn parameter_gen_test() {
 #[test]
 fn default_impl_test() {
     let mut mock = MockHelloWorld::new();
-    let method = mock.method_default_method()
-        .first_call()
-        .set_result(5);
+    let method = mock.method_default_method().first_call().set_result(5);
 
     mock.set_default_method(method);
     assert!(mock.default_method(1, 1) == 5);
