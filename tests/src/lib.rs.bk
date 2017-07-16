@@ -66,6 +66,15 @@ impl HelloWorld for Foo {
     }
 }
 
+// #[mock]
+// impl Clone for Foo {
+//     fn clone(&self) -> Self {
+//         Foo { x: self.x, y: self.y }
+//     }
+// }
+
+impl Clone for Foo { fn clone ( & self ) -> Self { Foo { x : self . x , y : self . y } } } # [ allow ( dead_code ) ] struct MockClone < T : Clone > { fallback : Option < T > , clone : Option < MockMethodForClone < Foo >> , } # [ allow ( dead_code ) ] struct MockMethodForClone < U > { call_num : std :: sync :: Mutex < usize > , current_num : std :: sync :: Mutex < usize > , retval : std :: sync :: Mutex < std :: collections :: HashMap < usize , U >> , } # [ allow ( dead_code ) ] impl < T > MockClone < T > where T : Clone { pub fn method_clone ( & self ) -> MockMethodForClone < Foo > { MockMethodForClone { call_num : std :: sync :: Mutex :: new ( 1 ) , current_num : std :: sync :: Mutex :: new ( 1 ) , retval : std :: sync :: Mutex :: new ( std :: collections :: HashMap :: new ( ) ) } } pub fn set_clone ( & mut self , method : MockMethodForClone < Foo > ) { self . clone = Some ( method ) ; } pub fn new ( ) -> MockClone < T > { MockClone { fallback : None , clone : None , } } pub fn set_fallback ( & mut self , t : T ) { self . fallback = Some ( t ) ; } } # [ allow ( dead_code ) ] impl < U > MockMethodForClone < U > { pub fn first_call ( self ) -> Self { self . nth_call ( 1 ) } pub fn second_call ( self ) -> Self { self . nth_call ( 2 ) } pub fn nth_call ( self , num : usize ) -> Self { { let mut value = self . call_num . lock ( ) . unwrap ( ) ; * value = num ; } self } pub fn set_result ( self , retval : U ) -> Self { { let call_num = self . call_num . lock ( ) . unwrap ( ) ; let mut map = self . retval . lock ( ) . unwrap ( ) ; map . insert ( * call_num , retval ) ; } self } pub fn call ( & self ) -> Option < U > { let mut value = self . current_num . lock ( ) . unwrap ( ) ; let current_num = * value ; * value += 1 ; let mut map = self . retval . lock ( ) . unwrap ( ) ; map . remove ( & current_num ) } pub fn when < F > ( self , _ : F ) -> Self where F : FnOnce ( ) -> bool { self } } impl < T > Clone for MockClone < T > where T : Clone { fn clone ( & self ) -> Self { match self . clone . as_ref ( ) { Some ( method ) => { match method . call ( ) { Some ( retval ) => { retval } , None => { let ref fallback = self . fallback . as_ref ( ) . expect ( "Called method without either a fallback, or a set result" ) ; fallback . clone ( ) } } } , None => { let ref fallback = self . fallback . as_ref ( ) . expect ( "Called method without either a fallback, or a set result" ) ; fallback . clone ( ) } } } }                  
+
 /* Example of API
    let mut mock = MockHelloWorld::new();
    let method = mock.method_bar()

@@ -41,13 +41,13 @@ struct Function {
 
 fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens) {
     let mut result = Vec::new();
-    let result_tok;
+    let trait_name;
     match item.node {
         syn::ItemKind::Impl(_unsafety, _impl_token, ref _generics, ref trait_, ref _self_ty, ref items) => {
             // @TODO trait_name will include things like foo::bar::baz
             // which won't compile. We will need to parse and handle this
-            let trait_name = trait_.clone().unwrap(); // @TODO dont raw unwrap.
-            result_tok = quote! { #trait_name };
+            let name = trait_.clone().unwrap(); // @TODO dont raw unwrap.
+            trait_name = quote! { #name };
             for item in items {
                 match item.node {
                     syn::ImplItemKind::Method(ref sig, ref _block) => {
@@ -60,7 +60,7 @@ fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens) {
         _ => { panic!("#[mock] must be applied to an Impl statement."); }
     };
 
-    (result, result_tok)
+    (result, trait_name)
 }
 
 fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens) {
@@ -158,6 +158,10 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         let setter = concat_idents("set_", name_stream.as_str());
         let (args_with_types, args_with_no_self_no_types) = parse_args(function.decl.inputs);
         let (no_return, return_type) = parse_return_type(function.decl.output);
+
+        if return_type.as_str() == "Self" {
+            panic!("Impls with the 'Self' return type are not supported. This is due to the fact that we generate an impl of your trait for a Mock struct. Methods that return Self will return an instance on our mock struct, not YOUR struct, which is not what you want.");
+        }
 
         // This is getting a litte confusing with all of the tokens here.
         // This is defining the methods for #ident, which is generated per method of the impl trait.
@@ -257,8 +261,8 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         // and instead parameterize the set_fallback method, storing
         // a box to a #trait_name
         #[allow(dead_code)]
-        struct #impl_name<T: #trait_name> {
-            fallback: Option<T>,
+        struct #impl_name {
+            fallback: Option<Box<#trait_name>>,
             #fields
         }
 
@@ -272,15 +276,15 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         // Your mocks may not use all of these functions, so it's fine to allow
         // dead code in this impl block.
         #[allow(dead_code)]
-        impl<T> #impl_name<T> where T: #trait_name {
+        impl #impl_name {
             #mock_impl_methods
 
-            pub fn new() -> #impl_name<T> {
+            pub fn new() -> #impl_name {
                 #impl_name { fallback: None, #ctor }
             }
 
-            pub fn set_fallback(&mut self, t: T) {
-                self.fallback = Some(t);
+            pub fn set_fallback<T: 'static + #trait_name>(&mut self, t: T) {
+                self.fallback = Some(Box::new(t));
             }
         }
 
@@ -328,7 +332,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
 
         }
 
-        impl<T> #trait_name for #impl_name<T> where T: #trait_name {
+        impl #trait_name for #impl_name {
             #method_impls
         }
     };
