@@ -174,7 +174,8 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 #mock_method_name {
                     call_num: std::sync::Mutex::new(1),
                     current_num: std::sync::Mutex::new(1),
-                    retval: std::sync::Mutex::new(std::collections::HashMap::new())
+                    retval: std::sync::Mutex::new(std::collections::HashMap::new()),
+                    lambda: None,
                 }
             }
 
@@ -269,6 +270,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             call_num: std::sync::Mutex<usize>,
             current_num: std::sync::Mutex<usize>,
             retval: std::sync::Mutex<std::collections::HashMap<usize, __RESULT_NAME>>,
+            lambda: Option<Box<Fn() -> __RESULT_NAME>>,
         }
 
         // Your mocks may not use all of these functions, so it's fine to allow
@@ -307,6 +309,10 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
 
             pub fn set_result(self, retval: __RESULT_NAME) -> Self {
+                if self.lambda.is_some() {
+                    panic!("Attempting to call set_result with after 'return_result_of' has been called. These two APIs are mutally exclusive, and should not be used together");
+                }
+                
                 {
                     let call_num = self.call_num.lock().unwrap();
                     let mut map = self.retval.lock().unwrap();
@@ -315,21 +321,26 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 self
             }
 
-            // @TODO need to handle 'when' case
             pub fn call(&self) -> Option<__RESULT_NAME> {
-                let mut value = self.current_num.lock().unwrap();
-                let current_num = *value;
-                *value += 1;
-                let mut map = self.retval.lock().unwrap();
-                map.remove(&current_num)
+                match self.lambda {
+                    Some(ref lm) => {
+                        Some(lm())
+                    },
+                    None => {
+                        let mut value = self.current_num.lock().unwrap();
+                        let current_num = *value;
+                        *value += 1;
+                        let mut map = self.retval.lock().unwrap();
+                        map.remove(&current_num)
+                    }
+                }                
             }
 
-            // @TODO implement
-            pub fn when<F>(self, _: F) -> Self
-                where F: FnOnce() -> bool {
+            pub fn return_result_of<F: 'static>(mut self, lambda: F) -> Self
+                where F: Fn() -> __RESULT_NAME {
+                self.lambda = Some(Box::new(lambda));
                 self
             }
-
         }
 
         impl #trait_name for #impl_name {

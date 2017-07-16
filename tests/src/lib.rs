@@ -102,7 +102,6 @@ fn it_works() {
     mock.set_fallback(foo);
     let method = mock.method_hello_world()
         .first_call()
-        .when(|| true)
         .set_result(());
 
     mock.set_hello_world(method);
@@ -113,7 +112,6 @@ fn it_works() {
         .set_result(4)
         .first_call()
         .set_result(3);
-
 
     mock.set_foo(foo_method);
     let result = mock.foo();
@@ -159,4 +157,26 @@ fn default_impl_test() {
 
     mock.set_default_method(method);
     assert!(mock.default_method(1, 1) == 5);
+}
+
+#[test]
+fn return_result_of() {
+    let x = Some(12);
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_bar()
+        .return_result_of(move || x);
+
+    mock.set_bar(method);
+    assert!(mock.bar() == Some(12));
+    assert!(mock.bar() == Some(12));
+}
+
+#[test]
+#[should_panic]
+fn return_result_of_and_set_result() {
+    let x = Some(12);
+    let mock = MockHelloWorld::new();
+    mock.method_bar()
+        .return_result_of(move || x)
+        .set_result(Some(13));
 }
