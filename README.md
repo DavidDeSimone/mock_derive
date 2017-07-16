@@ -1,4 +1,5 @@
 [![Follow us out on Crates.io](https://img.shields.io/crates/v/mock_derive.svg)](https://crates.io/crates/mock_derive)
+[![Build Status](https://travis-ci.org/DavidDeSimone/mockitol.svg?branch=master)](https://travis-ci.org/DavidDeSimone/mockitol)
 
 Mockitol is an easy to setup, rich mocking library for the Rust programming language. It will allow you to quickly set up unit tests when leveraged with another testing system, like `cargo test`.
 
