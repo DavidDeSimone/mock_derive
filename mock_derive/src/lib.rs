@@ -254,9 +254,6 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let stream = quote! {
         #impl_item
 
-        // @TODO we may be able to get rid of the parameter T here,
-        // and instead parameterize the set_fallback method, storing
-        // a box to a #trait_name
         #[allow(dead_code)]
         struct #impl_name {
             fallback: Option<Box<#trait_name>>,
@@ -264,10 +261,11 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         }
 
         #[allow(dead_code)]
-        struct #mock_method_name<U> {
+        #[allow(non_camel_case_types)]
+        struct #mock_method_name<__RESULT_NAME> {
             call_num: std::sync::Mutex<usize>,
             current_num: std::sync::Mutex<usize>,
-            retval: std::sync::Mutex<std::collections::HashMap<usize, U>>,
+            retval: std::sync::Mutex<std::collections::HashMap<usize, __RESULT_NAME>>,
         }
 
         // Your mocks may not use all of these functions, so it's fine to allow
@@ -280,13 +278,15 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 #impl_name { fallback: None, #ctor }
             }
 
-            pub fn set_fallback<T: 'static + #trait_name>(&mut self, t: T) {
+            #[allow(non_camel_case_types)]
+            pub fn set_fallback<__TYPE_NAME: 'static + #trait_name>(&mut self, t: __TYPE_NAME) {
                 self.fallback = Some(Box::new(t));
             }
         }
 
         #[allow(dead_code)]
-        impl<U> #mock_method_name<U> {
+        #[allow(non_camel_case_types)]
+        impl<__RESULT_NAME> #mock_method_name<__RESULT_NAME> {
             pub fn first_call(self) -> Self {
                 self.nth_call(1)
             }
@@ -303,7 +303,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 self
             }
 
-            pub fn set_result(self, retval: U) -> Self {
+            pub fn set_result(self, retval: __RESULT_NAME) -> Self {
                 {
                     let call_num = self.call_num.lock().unwrap();
                     let mut map = self.retval.lock().unwrap();
@@ -313,7 +313,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
 
             // @TODO need to handle 'when' case
-            pub fn call(&self) -> Option<U> {
+            pub fn call(&self) -> Option<__RESULT_NAME> {
                 let mut value = self.current_num.lock().unwrap();
                 let current_num = *value;
                 *value += 1;

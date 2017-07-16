@@ -27,6 +27,8 @@ extern crate mock_derive;
 
 use mock_derive::mock;
 
+mod generic_tests;
+
 #[allow(dead_code)]
 struct Foo {
     x: i32,
