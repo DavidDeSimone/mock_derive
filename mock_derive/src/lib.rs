@@ -70,6 +70,7 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Muta
     let mut args_with_types = quote::Tokens::new();
     let mut args_with_no_self_no_types = quote::Tokens::new();
     let arg_names = vec![quote!{a}, quote!{b}, quote!{c}, quote!{d}, quote!{e}, quote!{f}, quote!{g}, quote!{h}];
+    let mut is_instance_method = false;
     let mut mutable_status = syn::Mutability::Immutable;
     for input in decl {
         match input {
@@ -84,7 +85,8 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Muta
                         &self
                     };
                 }
-                
+
+                is_instance_method = true;
                 argc += 1;
             },
             syn::FnArg::SelfValue(mutability) => {
@@ -99,6 +101,7 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Muta
                     };
                 }
 
+                is_instance_method = true;
                 argc += 1;
             },
             syn::FnArg::Captured(_pat, ty) => {
@@ -124,6 +127,10 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Muta
             },
             _ => {}
         }
+    }
+
+    if !is_instance_method {
+        panic!("Mocking a trait with static methods is not yet supported. This is planned to be supported in the future");
     }
 
     (args_with_types, args_with_no_self_no_types, mutable_status)
