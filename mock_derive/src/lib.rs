@@ -42,7 +42,7 @@ struct Function {
 fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens) {
     let mut result = Vec::new();
     let ident_name = item.ident.clone();
-    let mut trait_name = quote! { #ident_name };
+    let trait_name = quote! { #ident_name };
     match item.node {
         syn::ItemKind::Trait(_unsafety, ref generics, ref _ty_param_bound, ref items) => {
             if generics.ty_params.len() > 0 {
@@ -58,21 +58,6 @@ fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens) {
                 }
             }
         },
-        syn::ItemKind::Impl(_unsafety, _impl_token, ref _generics, ref trait_, ref _self_ty, ref items) => {
-            // @TODO trait_name will include things like foo::bar::baz
-            // which won't compile. We will need to parse and handle this
-            let trait_clone = trait_.clone().unwrap(); // @TODO dont raw unwrap.
-            trait_name = quote! { #trait_clone };
-            for item in items {
-                match item.node {
-                    syn::ImplItemKind::Method(ref sig, ref _block) => {
-                        result.push(Function {name: item.ident.clone(), decl: sig.decl.clone() } );
-                    },
-                    _ => { }
-                }
-            }
-        }
-
         _ => { panic!("#[mock] must be applied to a Trait declaration."); }
     };
 
@@ -160,7 +145,6 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let mut fields = quote::Tokens::new();
     let mut ctor = quote::Tokens::new();
     let mut method_impls = quote::Tokens::new();
-    let mut generics = quote::Tokens::new();
 
     let impl_name = concat_idents("Mock", trait_name.as_str());
     let mock_method_name = concat_idents("MockMethodFor", trait_name.as_str());
@@ -274,7 +258,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         #impl_item
 
         #[allow(dead_code)]
-        struct #impl_name #generics {
+        struct #impl_name  {
             fallback: Option<Box<#trait_name>>,
             #fields
         }
@@ -290,7 +274,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         // Your mocks may not use all of these functions, so it's fine to allow
         // dead code in this impl block.
         #[allow(dead_code)]
-        impl #generics #impl_name {
+        impl  #impl_name {
             #mock_impl_methods
 
             pub fn new() -> #impl_name {
@@ -348,7 +332,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
 
         }
 
-        impl #trait_name #generics for #impl_name {
+        impl #trait_name for #impl_name {
             #method_impls
         }
     };
