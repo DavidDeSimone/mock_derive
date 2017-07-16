@@ -46,7 +46,7 @@ fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens) {
     match item.node {
         syn::ItemKind::Trait(_unsafety, ref generics, ref _ty_param_bound, ref items) => {
             if generics.ty_params.len() > 0 {
-                panic!("Mocking a trait definition with generics is not currently supported. Please mock a concrete implementation of this trait, with the types of the generic specified. See the README.md of mockitol for further details");
+                panic!("Mocking a trait definition with generics is not currently supported. See the README.md of mockitol for further details");
             }
             
             for item in items {

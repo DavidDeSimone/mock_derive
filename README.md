@@ -3,7 +3,7 @@ Mockitol is an easy to setup, rich mocking library for the Rust programming lang
 As a friendly note, mockitol is not yet a 1.0 crate, and is still under heavy development. As such, you may find several real world use cases that are not yet supported. If you find such a case, please open an issue and we will look at it as soon as possible.
 
 ## How mockitol is different then previous mocking librarys in other languages.
-In traditional OO languages, mocking in usually based around inheritence, or a mix of method replacement in more dyanmic languages. You make a `Foo` from a mock factory, define the behavior of that `Foo`, and pass it to functions expecting a `Foo`. Rust does not have traditional inheritence, meaning that *only a Foo is a Foo*. Mockitol encourages Implementation Mocking. This means that you will derive your mock for an implementation of a trait. You will pass that mock to methods expecting something that implements that trait, and you will be able to control the behavior of that mock, similar to other mocking libs you may have worked with in the past.
+In traditional OO languages, mocking in usually based around inheritence, or a mix of method replacement in more dyanmic languages. You make a `Foo` from a mock factory, define the behavior of that `Foo`, and pass it to functions expecting a `Foo`. Rust does not have traditional inheritence, meaning that *only a Foo is a Foo*. Mockitol encourages Implementation Mocking. This means that you will derive your mock for a trait. You will pass that mock to methods expecting something that implements that trait, and you will be able to control the behavior of that mock, similar to other mocking libs you may have worked with in the past.
 
 ## Examples
 Say we have the following code: 
@@ -53,7 +53,7 @@ impl HelloWorld for Foo {
     }
 }
 ```
-You'll notice that we have included a #[mock] derective above our impl block. This will generate code that we can use for testing. For example, we can write the following test functions:
+You'll notice that we have included a #[mock] derective above our trait definition. This will generate code that we can use for testing. For example, we can write the following test functions:
  
 ``` rust
 #[test]
