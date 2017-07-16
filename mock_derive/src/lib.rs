@@ -39,10 +39,11 @@ struct Function {
     pub decl: syn::FnDecl
 }
 
-fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens) {
+fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens, syn::Visibility) {
     let mut result = Vec::new();
     let ident_name = item.ident.clone();
     let trait_name = quote! { #ident_name };
+    let vis = item.vis.clone();
     match item.node {
         syn::ItemKind::Trait(_unsafety, ref generics, ref _ty_param_bound, ref items) => {
             if generics.ty_params.len() > 0 {
@@ -61,14 +62,15 @@ fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens) {
         _ => { panic!("#[mock] must be applied to a Trait declaration."); }
     };
 
-    (result, trait_name)
+    (result, trait_name, vis)
 }
 
-fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens) {
+fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Mutability) {
     let mut argc = 0;
     let mut args_with_types = quote::Tokens::new();
     let mut args_with_no_self_no_types = quote::Tokens::new();
     let arg_names = vec![quote!{a}, quote!{b}, quote!{c}, quote!{d}, quote!{e}, quote!{f}, quote!{g}, quote!{h}];
+    let mut mutable_status = syn::Mutability::Immutable;
     for input in decl {
         match input {
             syn::FnArg::SelfRef(_lifetime, mutability) => {
@@ -76,6 +78,7 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens) {
                     args_with_types = quote! {
                         &mut self
                     };
+                    mutable_status = mutability.clone();
                 } else {
                     args_with_types = quote! {
                         &self
@@ -89,6 +92,7 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens) {
                     args_with_types = quote! {
                         mut self
                     };
+                    mutable_status = mutability.clone();
                 } else {
                     args_with_types = quote! {
                         self
@@ -122,7 +126,7 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens) {
         }
     }
 
-    (args_with_types, args_with_no_self_no_types)
+    (args_with_types, args_with_no_self_no_types, mutable_status)
 }
 
 fn parse_return_type(output: syn::FunctionRetTy) -> (bool, quote::Tokens) {
@@ -140,14 +144,19 @@ fn parse_return_type(output: syn::FunctionRetTy) -> (bool, quote::Tokens) {
 pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let impl_item = syn::parse_item(&impl_ts.to_string()).unwrap();
 
-    let (trait_functions, trait_name) = parse_impl(&impl_item);
+    let (trait_functions, trait_name, vis) = parse_impl(&impl_item);
     let mut mock_impl_methods = quote::Tokens::new();
     let mut fields = quote::Tokens::new();
     let mut ctor = quote::Tokens::new();
     let mut method_impls = quote::Tokens::new();
-
+    let mut pubtok = quote::Tokens::new();
+    
     let impl_name = concat_idents("Mock", trait_name.as_str());
     let mock_method_name = concat_idents("MockMethodFor", trait_name.as_str());
+
+    if vis == syn::Visibility::Public {
+        pubtok = quote! { pub };
+    }
     
     // For each method in the Impl block, we create a "method_" name function that returns an
     // object to mutate
@@ -156,7 +165,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         let name_stream = quote! { #name };
         let ident = concat_idents("method_", name_stream.as_str());
         let setter = concat_idents("set_", name_stream.as_str());
-        let (args_with_types, args_with_no_self_no_types) = parse_args(function.decl.inputs);
+        let (args_with_types, args_with_no_self_no_types, mutability) = parse_args(function.decl.inputs);
         let (no_return, return_type) = parse_return_type(function.decl.output);
 
         if return_type.as_str() == "Self" {
@@ -172,9 +181,9 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             
             pub fn #ident(&self) -> #mock_method_name<#return_type> {
                 #mock_method_name {
-                    call_num: std::sync::Mutex::new(1),
-                    current_num: std::sync::Mutex::new(1),
-                    retval: std::sync::Mutex::new(std::collections::HashMap::new()),
+                    call_num: ::std::sync::Mutex::new(1),
+                    current_num: ::std::sync::Mutex::new(1),
+                    retval: ::std::sync::Mutex::new(::std::collections::HashMap::new()),
                     lambda: None,
                 }
             }
@@ -195,9 +204,18 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             #ctor #name_stream : None, 
         };
 
+        let get_ref;
+        let mut mut_token = quote::Tokens::new();
+        if mutability == syn::Mutability::Mutable {
+            get_ref = quote! { .as_mut() };
+            mut_token = quote!{ mut };
+        } else {
+            get_ref = quote! { .as_ref() };
+        }
+
         let fallback = quote! {
-            let ref fallback = self.fallback
-                .as_ref()
+            let ref #mut_token fallback = self.fallback
+                #get_ref
                 .expect("Called method without either a fallback, or a set result");
             fallback.#name_stream(#args_with_no_self_no_types)
         };
@@ -259,17 +277,17 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         #impl_item
 
         #[allow(dead_code)]
-        struct #impl_name  {
+        #pubtok struct #impl_name  {
             fallback: Option<Box<#trait_name>>,
             #fields
         }
 
         #[allow(dead_code)]
         #[allow(non_camel_case_types)]
-        struct #mock_method_name<__RESULT_NAME> {
-            call_num: std::sync::Mutex<usize>,
-            current_num: std::sync::Mutex<usize>,
-            retval: std::sync::Mutex<std::collections::HashMap<usize, __RESULT_NAME>>,
+        #pubtok struct #mock_method_name<__RESULT_NAME> {
+            call_num: ::std::sync::Mutex<usize>,
+            current_num: ::std::sync::Mutex<usize>,
+            retval: ::std::sync::Mutex<::std::collections::HashMap<usize, __RESULT_NAME>>,
             lambda: Option<Box<Fn() -> __RESULT_NAME>>,
         }
 

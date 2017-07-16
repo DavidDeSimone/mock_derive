@@ -27,6 +27,11 @@ extern crate mock_derive;
 
 use mock_derive::mock;
 
+mod export;
+
+#[allow(unused_imports)]
+use export::ExportTrait;
+
 #[allow(dead_code)]
 struct Foo {
     x: i32,
@@ -100,9 +105,7 @@ fn it_works() {
     let foo = Foo::new();
     let mut mock = MockHelloWorld::new();
     mock.set_fallback(foo);
-    let method = mock.method_hello_world()
-        .first_call()
-        .set_result(());
+    let method = mock.method_hello_world().first_call().set_result(());
 
     mock.set_hello_world(method);
     mock.hello_world();
@@ -163,8 +166,7 @@ fn default_impl_test() {
 fn return_result_of() {
     let x = Some(12);
     let mut mock = MockHelloWorld::new();
-    let method = mock.method_bar()
-        .return_result_of(move || x);
+    let method = mock.method_bar().return_result_of(move || x);
 
     mock.set_bar(method);
     assert!(mock.bar() == Some(12));
@@ -176,7 +178,19 @@ fn return_result_of() {
 fn return_result_of_and_set_result() {
     let x = Some(12);
     let mock = MockHelloWorld::new();
-    mock.method_bar()
-        .return_result_of(move || x)
-        .set_result(Some(13));
+    mock.method_bar().return_result_of(move || x).set_result(
+        Some(13),
+    );
+}
+
+#[test]
+fn export_trait() {
+    let mut mock = export::MockExportTrait::new();
+    let method = mock.method_export_int()
+        .return_result_of(|| 22);
+
+    mock.set_export_int(method);
+    for _ in 0..2300 {
+        assert!(mock.export_int() == 22);
+    }
 }
