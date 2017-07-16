@@ -40,14 +40,17 @@ impl Foo {
     }
 }
 
+#[mock]
 trait HelloWorld {
     fn hello_world(&self);
     fn foo(&self) -> u32;
     fn bar(&self) -> Option<u32>;
     fn baz(&self, x: i32) -> Foo;
+    fn default_method(&self, x: i32, y: i32) -> i32 {
+        x + y
+    }
 }
 
-#[mock]
 impl HelloWorld for Foo {
     fn hello_world(&self) {
         println!("Hello World!");
@@ -147,4 +150,15 @@ fn parameter_gen_test() {
     mock.set_baz(method);
     let result = mock.baz(32);
     assert!(result.x == 0 && result.y == 0);
+}
+
+#[test]
+fn default_impl_test() {
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_default_method()
+        .first_call()
+        .set_result(5);
+
+    mock.set_default_method(method);
+    assert!(mock.default_method(1, 1) == 5);
 }

@@ -41,23 +41,20 @@ struct Function {
 
 fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens) {
     let mut result = Vec::new();
-    let trait_name;
+    let ident_name = item.ident.clone();
+    let trait_name = quote! { #ident_name };
     match item.node {
-        syn::ItemKind::Impl(_unsafety, _impl_token, ref _generics, ref trait_, ref _self_ty, ref items) => {
-            // @TODO trait_name will include things like foo::bar::baz
-            // which won't compile. We will need to parse and handle this
-            let name = trait_.clone().unwrap(); // @TODO dont raw unwrap.
-            trait_name = quote! { #name };
+        syn::ItemKind::Trait(_unsafety, ref _generics, ref _ty_param_bound, ref items) => {
             for item in items {
                 match item.node {
-                    syn::ImplItemKind::Method(ref sig, ref _block) => {
+                    syn::TraitItemKind::Method(ref sig, ref _block) => {
                         result.push(Function {name: item.ident.clone(), decl: sig.decl.clone() } );
                     },
                     _ => { }
                 }
             }
         },
-        _ => { panic!("#[mock] must be applied to an Impl statement."); }
+        _ => { panic!("#[mock] must be applied to a Trait declaration."); }
     };
 
     (result, trait_name)

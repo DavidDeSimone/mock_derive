@@ -24,14 +24,17 @@ impl Foo {
     }
 }
 
+#[mock]
 trait HelloWorld {
     fn hello_world(&self);
     fn foo(&self) -> u32;
     fn bar(&self) -> Option<u32>;
     fn baz(&self, x: i32) -> Foo;
+    fn default_method(&self, x: i32, y: i32) -> i32 {
+        x + y
+    }
 }
 
-#[mock]
 impl HelloWorld for Foo {
     fn hello_world(&self) {
         println!("Hello World!");
@@ -87,9 +90,7 @@ fn it_works() {
 
 #[test]
 fn parameter_type_test() {
-    let mut mock = MockHelloWorld::<Foo>::new(); // The Foo parameter here is any type that implements
-                                                 // HelloWorld, needed for type generation related to
-						 // fallbacks
+    let mut mock = MockHelloWorld::new();
     let method = mock.method_bar()
         .first_call()
         .set_result(Some(11))
@@ -105,7 +106,7 @@ fn parameter_type_test() {
 
 #[test]
 fn parameter_gen_test() {
-    let mut mock = MockHelloWorld::<Foo>::new();
+    let mut mock = MockHelloWorld::new();
     let method = mock.method_baz().first_call().set_result(Foo::new());
 
     mock.set_baz(method);
