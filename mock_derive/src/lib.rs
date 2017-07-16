@@ -191,16 +191,10 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         };
 
         let fallback = quote! {
-            match self.fallback {
-                Some(ref fallback) => {
-                    // Call the fallback
-                    fallback.#name_stream(#args_with_no_self_no_types)
-                },
-                
-                None => {
-                    panic!("Called method without either a fallback, or a set result");
-                }
-            }
+            let ref fallback = self.fallback
+                .as_ref()
+                .expect("Called method without either a fallback, or a set result");
+            fallback.#name_stream(#args_with_no_self_no_types)
         };
 
         if no_return {
