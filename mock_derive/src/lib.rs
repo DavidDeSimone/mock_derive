@@ -36,7 +36,8 @@ use std::str::FromStr;
 
 struct Function {
     pub name: syn::Ident,
-    pub decl: syn::FnDecl
+    pub decl: syn::FnDecl,
+    pub safety: syn::Unsafety
 }
 
 fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens, syn::Visibility) {
@@ -53,7 +54,7 @@ fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens, syn::Visibilit
             for item in items {
                 match item.node {
                     syn::TraitItemKind::Method(ref sig, ref _block) => {
-                        result.push(Function {name: item.ident.clone(), decl: sig.decl.clone() } );
+                        result.push(Function {name: item.ident.clone(), decl: sig.decl.clone(), safety: sig.unsafety.clone() } );
                     },
                     _ => { }
                 }
@@ -179,6 +180,13 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             panic!("Impls with the 'Self' return type are not supported. This is due to the fact that we generate an impl of your trait for a Mock struct. Methods that return Self will return an instance on our mock struct, not YOUR struct, which is not what you want.");
         }
 
+        let unsafety;
+        if function.safety == syn::Unsafety::Unsafe {
+            unsafety = quote! { unsafe };
+        } else {
+            unsafety = quote! { };
+        }
+
         // This is getting a litte confusing with all of the tokens here.
         // This is defining the methods for #ident, which is generated per method of the impl trait.
         // we generate a getter called method_foo, and a setter called set_foo.
@@ -233,7 +241,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         if no_return {
             method_impls = quote! {
                 #method_impls
-                fn #name_stream(#args_with_types) {
+                #unsafety fn #name_stream(#args_with_types) {
                     // The user has called a method
                     match self.#name_stream.as_ref() {
                         Some(method) => {
@@ -258,7 +266,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         } else {
             method_impls = quote! {
                 #method_impls
-                fn #name_stream(#args_with_types) -> #return_type {
+                #unsafety fn #name_stream(#args_with_types) -> #return_type {
                     match self.#name_stream.as_ref() {
                         Some(method) => {
                             match method.call() {

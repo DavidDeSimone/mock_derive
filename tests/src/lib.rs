@@ -28,6 +28,7 @@ extern crate mock_derive;
 use mock_derive::mock;
 
 mod export;
+mod database;
 
 #[allow(unused_imports)]
 use export::ExportTrait;
