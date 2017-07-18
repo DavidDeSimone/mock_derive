@@ -186,8 +186,7 @@ fn return_result_of_and_set_result() {
 #[test]
 fn export_trait() {
     let mut mock = export::MockExportTrait::new();
-    let method = mock.method_export_int()
-        .return_result_of(|| 22);
+    let method = mock.method_export_int().return_result_of(|| 22);
 
     mock.set_export_int(method);
     for _ in 0..2300 {
@@ -199,8 +198,7 @@ fn export_trait() {
 #[should_panic(expected = "never called")]
 fn never_be_called() {
     let mut mock = MockHelloWorld::new();
-    let method = mock.method_foo()
-        .never_called();
+    let method = mock.method_foo().never_called();
     mock.set_foo(method);
 
     mock.foo();
@@ -209,9 +207,7 @@ fn never_be_called() {
 #[test]
 fn max_calls() {
     let mut mock = MockHelloWorld::new();
-    let method = mock.method_foo()
-        .called_at_most(10)
-        .return_result_of(|| 10);
+    let method = mock.method_foo().called_at_most(10).return_result_of(|| 10);
     mock.set_foo(method);
 
     for _ in 0..10 {
@@ -223,9 +219,7 @@ fn max_calls() {
 #[should_panic(expected = "called at most")]
 fn max_calls_exceeded() {
     let mut mock = MockHelloWorld::new();
-    let method = mock.method_foo()
-        .called_at_most(10)
-        .return_result_of(|| 10);
+    let method = mock.method_foo().called_at_most(10).return_result_of(|| 10);
     mock.set_foo(method);
 
     for _ in 0..11 {
@@ -236,9 +230,9 @@ fn max_calls_exceeded() {
 #[test]
 fn min_calls() {
     let mut mock = MockHelloWorld::new();
-    let method = mock.method_foo()
-        .called_at_least(10)
-        .return_result_of(|| 10);
+    let method = mock.method_foo().called_at_least(10).return_result_of(
+        || 10,
+    );
     mock.set_foo(method);
 
     for _ in 0..11 {
@@ -250,9 +244,9 @@ fn min_calls() {
 #[should_panic(expected = "called at least")]
 fn min_calls_not_met() {
     let mut mock = MockHelloWorld::new();
-    let method = mock.method_foo()
-        .called_at_least(10)
-        .return_result_of(|| 10);
+    let method = mock.method_foo().called_at_least(10).return_result_of(
+        || 10,
+    );
     mock.set_foo(method);
 
     for _ in 0..9 {
@@ -263,9 +257,7 @@ fn min_calls_not_met() {
 #[test]
 fn called_once() {
     let mut mock = MockHelloWorld::new();
-    let method = mock.method_foo()
-        .called_once()
-        .return_result_of(|| 10);
+    let method = mock.method_foo().called_once().return_result_of(|| 10);
     mock.set_foo(method);
 
     mock.foo();
@@ -275,9 +267,7 @@ fn called_once() {
 #[should_panic]
 fn called_once_failure_too_much() {
     let mut mock = MockHelloWorld::new();
-    let method = mock.method_foo()
-        .called_once()
-        .return_result_of(|| 10);
+    let method = mock.method_foo().called_once().return_result_of(|| 10);
     mock.set_foo(method);
 
     mock.foo();
@@ -289,9 +279,6 @@ fn called_once_failure_too_much() {
 #[should_panic]
 fn called_once_failure_too_little() {
     let mut mock = MockHelloWorld::new();
-    let method = mock.method_foo()
-        .called_once()
-        .return_result_of(|| 10);
+    let method = mock.method_foo().called_once().return_result_of(|| 10);
     mock.set_foo(method);
 }
-

@@ -40,15 +40,16 @@ struct Function {
     pub safety: syn::Unsafety
 }
 
-fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens, syn::Visibility) {
+fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens, syn::Visibility, quote::Tokens) {
     let mut result = Vec::new();
     let ident_name = item.ident.clone();
     let trait_name = quote! { #ident_name };
     let vis = item.vis.clone();
+    let mut generic_tokens = quote! { };
     match item.node {
         syn::ItemKind::Trait(_unsafety, ref generics, ref _ty_param_bound, ref items) => {
-            if generics.ty_params.len() > 0 {
-                panic!("Mocking a trait definition with generics is not currently supported. See the README.md of mockitol for further details");
+            for generic in generics.clone().ty_params {
+                generic_tokens = quote! { #generic_tokens #generic, };
             }
             
             for item in items {
@@ -63,7 +64,7 @@ fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens, syn::Visibilit
         _ => { panic!("#[mock] must be applied to a Trait declaration."); }
     };
 
-    (result, trait_name, vis)
+    (result, trait_name, vis, quote! { <#generic_tokens> })
 }
 
 fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Mutability) {
@@ -152,7 +153,7 @@ fn parse_return_type(output: syn::FunctionRetTy) -> (bool, quote::Tokens) {
 pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let impl_item = syn::parse_item(&impl_ts.to_string()).unwrap();
 
-    let (trait_functions, trait_name, vis) = parse_impl(&impl_item);
+    let (trait_functions, trait_name, vis, generics) = parse_impl(&impl_item);
     let mut mock_impl_methods = quote::Tokens::new();
     let mut fields = quote::Tokens::new();
     let mut ctor = quote::Tokens::new();
@@ -295,8 +296,8 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         #impl_item
 
         #[allow(dead_code)]
-        #pubtok struct #impl_name  {
-            fallback: Option<Box<#trait_name>>,
+        #pubtok struct #impl_name #generics  {
+            fallback: Option<Box<#trait_name #generics>>,
             #fields
         }
 
@@ -315,15 +316,15 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
         // Your mocks may not use all of these functions, so it's fine to allow
         // dead code in this impl block.
         #[allow(dead_code)]
-        impl  #impl_name {
+        impl #generics #impl_name #generics {
             #mock_impl_methods
 
-            pub fn new() -> #impl_name {
+            pub fn new() -> #impl_name #generics {
                 #impl_name { fallback: None, #ctor }
             }
 
             #[allow(non_camel_case_types)]
-            pub fn set_fallback<__TYPE_NAME: 'static + #trait_name>(&mut self, t: __TYPE_NAME) {
+            pub fn set_fallback<__TYPE_NAME: 'static + #trait_name #generics>(&mut self, t: __TYPE_NAME) {
                 self.fallback = Some(Box::new(t));
             }
         }
@@ -457,7 +458,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
         }
 
-        impl #trait_name for #impl_name {
+        impl #generics #trait_name #generics for #impl_name #generics {
             #method_impls
         }
         
