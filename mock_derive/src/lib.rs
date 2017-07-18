@@ -192,6 +192,8 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                     current_num: ::std::sync::Mutex::new(1),
                     retval: ::std::sync::Mutex::new(::std::collections::HashMap::new()),
                     lambda: None,
+                    should_never_be_called: false,
+                    max_calls: None,
                 }
             }
 
@@ -296,6 +298,8 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             current_num: ::std::sync::Mutex<usize>,
             retval: ::std::sync::Mutex<::std::collections::HashMap<usize, __RESULT_NAME>>,
             lambda: Option<Box<Fn() -> __RESULT_NAME>>,
+            should_never_be_called: bool,
+            max_calls: Option<usize>,
         }
 
         // Your mocks may not use all of these functions, so it's fine to allow
@@ -335,6 +339,8 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
 
             pub fn set_result(self, retval: __RESULT_NAME) -> Self {
                 if self.lambda.is_some() {
+                    // @TODO This most likely doesn't want to be a panic. Otherwise, this can trigger
+                    // #[should_panic] tests in conditions their owner's don't expect.
                     panic!("Attempting to call set_result with after 'return_result_of' has been called. These two APIs are mutally exclusive, and should not be used together");
                 }
                 
@@ -346,15 +352,43 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 self
             }
 
+            pub fn never_called(mut self) -> Self {
+                self.should_never_be_called = true;
+                self
+            }
+
+            pub fn called_at_most(mut self, calls: usize) -> Self {
+                self.max_calls = Some(calls); 
+                self
+            }
+
+            // This function is used to process state for the called_at_* API
+            fn process_current_call(&self, current_num: usize) {
+                if let Some(max_calls) = self.max_calls {
+                    if current_num > max_calls {
+                        panic!("Method called too many times, current number of calls is {}, maximum is {}",
+                               current_num,
+                               max_calls);
+                    }
+                }
+            }
+
             pub fn call(&self) -> Option<__RESULT_NAME> {
+                if self.should_never_be_called {
+                    panic!("Called a method that has been marked as 'never be called'!");
+                }
+
+                let mut value = self.current_num.lock().unwrap();
+                let current_num = *value;
+                *value += 1;
+                
+                self.process_current_call(current_num);
+                
                 match self.lambda {
                     Some(ref lm) => {
                         Some(lm())
                     },
                     None => {
-                        let mut value = self.current_num.lock().unwrap();
-                        let current_num = *value;
-                        *value += 1;
                         let mut map = self.retval.lock().unwrap();
                         map.remove(&current_num)
                     }

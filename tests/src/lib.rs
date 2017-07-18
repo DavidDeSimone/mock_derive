@@ -193,3 +193,41 @@ fn export_trait() {
         assert!(mock.export_int() == 22);
     }
 }
+
+#[test]
+#[should_panic]
+fn never_be_called() {
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_foo()
+        .never_called();
+    mock.set_foo(method);
+
+    mock.foo();
+}
+
+#[test]
+fn max_calls() {
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_foo()
+        .called_at_most(10)
+        .return_result_of(|| 10);
+    mock.set_foo(method);
+
+    for _ in 0..10 {
+        mock.foo();
+    }
+}
+
+#[test]
+#[should_panic]
+fn max_calls_exceeded() {
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_foo()
+        .called_at_most(10)
+        .return_result_of(|| 10);
+    mock.set_foo(method);
+
+    for _ in 0..11 {
+        mock.foo();
+    }
+}
