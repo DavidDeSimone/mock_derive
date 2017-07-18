@@ -29,6 +29,7 @@ use mock_derive::mock;
 
 mod export;
 mod database;
+mod generics;
 
 #[allow(unused_imports)]
 use export::ExportTrait;
