@@ -140,6 +140,46 @@ fn return_result_of() {
     assert!(mock.bar() == Some(12));
 }
 
+// You can also specify the total number of calls (i.e. once, 5 times, at least 5 times, at most 10 times, etc.)
+#[test]
+// When using "should panic" it's suggested you look for specific errors
+#[should_panic(expected = "called at least")] 
+fn min_calls_not_met() {
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_foo()
+        .called_at_least(10)
+        .return_result_of(|| 10);
+    mock.set_foo(method);
+
+    for _ in 0..9 {
+        mock.foo();
+    }
+}
+
+#[test]
+fn called_once() {
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_foo()
+        .called_once()
+        .return_result_of(|| 10);
+    mock.set_foo(method);
+
+    mock.foo();
+    // mock.foo(); // This would trigger a failure
+}
+
+
+#[test]
+#[should_panic]
+fn called_once_failure_too_little() {
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_foo()
+        .called_once()
+        .return_result_of(|| 10);
+    mock.set_foo(method);
+    // Foo is never called, this will panic on completion.
+}
+
 ```
 
 ## TESTING
