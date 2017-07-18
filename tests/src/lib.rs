@@ -195,7 +195,7 @@ fn export_trait() {
 }
 
 #[test]
-#[should_panic]
+#[should_panic(expected = "never called")]
 fn never_be_called() {
     let mut mock = MockHelloWorld::new();
     let method = mock.method_foo()
@@ -219,7 +219,7 @@ fn max_calls() {
 }
 
 #[test]
-#[should_panic]
+#[should_panic(expected = "called at most")]
 fn max_calls_exceeded() {
     let mut mock = MockHelloWorld::new();
     let method = mock.method_foo()

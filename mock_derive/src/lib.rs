@@ -339,8 +339,6 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
 
             pub fn set_result(self, retval: __RESULT_NAME) -> Self {
                 if self.lambda.is_some() {
-                    // @TODO This most likely doesn't want to be a panic. Otherwise, this can trigger
-                    // #[should_panic] tests in conditions their owner's don't expect.
                     panic!("Attempting to call set_result with after 'return_result_of' has been called. These two APIs are mutally exclusive, and should not be used together");
                 }
                 
@@ -353,11 +351,19 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
 
             pub fn never_called(mut self) -> Self {
+                if self.max_calls.is_some() {
+                    panic!("Attempting to use never_called API after using called_at_most");
+                }
+                
                 self.should_never_be_called = true;
                 self
             }
 
             pub fn called_at_most(mut self, calls: usize) -> Self {
+                if self.should_never_be_called {
+                    panic!("Attempting to use called_at_most API after using never_called");
+                }
+                
                 self.max_calls = Some(calls); 
                 self
             }
@@ -366,7 +372,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             fn process_current_call(&self, current_num: usize) {
                 if let Some(max_calls) = self.max_calls {
                     if current_num > max_calls {
-                        panic!("Method called too many times, current number of calls is {}, maximum is {}",
+                        panic!("Method failed 'called at most', current number of calls is {}, maximum is {}",
                                current_num,
                                max_calls);
                     }
@@ -375,7 +381,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
 
             pub fn call(&self) -> Option<__RESULT_NAME> {
                 if self.should_never_be_called {
-                    panic!("Called a method that has been marked as 'never be called'!");
+                    panic!("Called a method that has been marked as 'never called'!");
                 }
 
                 let mut value = self.current_num.lock().unwrap();
