@@ -51,6 +51,10 @@ fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens, syn::Visibilit
     match item.node {
         syn::ItemKind::Trait(_unsafety, ref generics, ref _ty_param_bound, ref items) => {
             let gens = generics.clone();
+            for life_ty in gens.lifetimes {
+                generic_tokens = quote! { #generic_tokens #life_ty, };
+            }
+
             for generic in gens.ty_params {
                 generic_tokens = quote! { #generic_tokens #generic, };
             }

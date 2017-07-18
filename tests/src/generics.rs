@@ -33,6 +33,12 @@ trait GenericTrait<T, U, Z>
     }
 }
 
+#[mock]
+trait LifetimeTrait<'a, T>
+    where T: 'a {
+    fn return_value(&self, t: T) -> &'a T;
+}
+
 #[test]
 fn generic_test_one() {
     let mut mock = MockGenericTrait::<Clonable, TypeOne, TypeTwo>::new();
@@ -43,4 +49,18 @@ fn generic_test_one() {
 
     mock.set_mix_and_match(method);
     mock.mix_and_match(arg1, &arg2, &mut arg3);
+}
+
+#[allow(dead_code)]
+static TEST_FLOAT: f32 = 1.0;
+
+#[test]
+fn generics_and_lifetime() {
+    let mut mock = MockLifetimeTrait::<'static, f32>::new();
+    let method = mock.method_return_value()
+        .called_once()
+        .set_result(&TEST_FLOAT);
+
+    mock.set_return_value(method);
+    mock.return_value(TEST_FLOAT.clone());
 }
