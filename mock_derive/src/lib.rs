@@ -194,6 +194,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                     lambda: None,
                     should_never_be_called: false,
                     max_calls: None,
+                    min_calls: None,
                 }
             }
 
@@ -300,6 +301,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             lambda: Option<Box<Fn() -> __RESULT_NAME>>,
             should_never_be_called: bool,
             max_calls: Option<usize>,
+            min_calls: Option<usize>,
         }
 
         // Your mocks may not use all of these functions, so it's fine to allow
@@ -368,15 +370,28 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 self
             }
 
-            // This function is used to process state for the called_at_* API
-            fn process_current_call(&self, current_num: usize) {
+            pub fn called_once(self) -> Self {
+                self.called_at_most(1)
+                    .called_at_least(1)
+            }
+
+            pub fn called_ntimes(self, calls: usize) -> Self {
+                self.called_at_most(calls)
+                    .called_at_least(calls)
+            }
+
+            pub fn called_at_least(mut self, calls: usize) -> Self {
+                self.min_calls = Some(calls);
+                self
+            }
+
+            fn exceedes_max_calls(&self, current_num: usize) -> bool {
+                let mut retval = false;
                 if let Some(max_calls) = self.max_calls {
-                    if current_num > max_calls {
-                        panic!("Method failed 'called at most', current number of calls is {}, maximum is {}",
-                               current_num,
-                               max_calls);
-                    }
+                    retval = current_num > max_calls
                 }
+                
+                retval
             }
 
             pub fn call(&self) -> Option<__RESULT_NAME> {
@@ -388,7 +403,9 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 let current_num = *value;
                 *value += 1;
                 
-                self.process_current_call(current_num);
+                if self.exceedes_max_calls(current_num) {
+                    panic!("Method failed 'called at most', current number of calls is {}", current_num);
+                }
                 
                 match self.lambda {
                     Some(ref lm) => {
@@ -408,9 +425,34 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
         }
 
+        #[allow(dead_code)]
+        #[allow(non_camel_case_types)]
+        impl<__RESULT_NAME> ::std::ops::Drop for #mock_method_name<__RESULT_NAME> {
+            fn drop(&mut self) {
+                if let Some(min_calls) = self.min_calls {
+                    
+                    // When using API like "called_once", if the user calls a maximum number of times,
+                    // Drop may still be called, and we will be unable to get a lock on current_num.
+                    // In this case, just silently continue, as we are already in a panic, and a
+                    // double panic will cause rust to fail to run our tests.
+                    if let Ok(value) = self.current_num.lock() {
+                        let current_num = *value;
+                        // If we have exceeded our max number of calls, we are already panicing
+                        // And we don't want to double panic
+                        if current_num - 1 < min_calls {
+                            panic!("Method failed 'called at least', current number of calls is {}, minimum is {}",
+                                   current_num,
+                                   min_calls);                        
+                        } 
+                    }
+                }
+            }
+        }
+
         impl #trait_name for #impl_name {
             #method_impls
         }
+        
     };
 
     TokenStream::from_str(stream.as_str()).unwrap()

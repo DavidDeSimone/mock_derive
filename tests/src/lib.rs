@@ -231,3 +231,66 @@ fn max_calls_exceeded() {
         mock.foo();
     }
 }
+
+#[test]
+fn min_calls() {
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_foo()
+        .called_at_least(10)
+        .return_result_of(|| 10);
+    mock.set_foo(method);
+
+    for _ in 0..11 {
+        mock.foo();
+    }
+}
+
+#[test]
+#[should_panic(expected = "called at least")]
+fn min_calls_not_met() {
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_foo()
+        .called_at_least(10)
+        .return_result_of(|| 10);
+    mock.set_foo(method);
+
+    for _ in 0..9 {
+        mock.foo();
+    }
+}
+
+#[test]
+fn called_once() {
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_foo()
+        .called_once()
+        .return_result_of(|| 10);
+    mock.set_foo(method);
+
+    mock.foo();
+}
+
+#[test]
+#[should_panic]
+fn called_once_failure_too_much() {
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_foo()
+        .called_once()
+        .return_result_of(|| 10);
+    mock.set_foo(method);
+
+    mock.foo();
+    mock.foo();
+}
+
+
+#[test]
+#[should_panic]
+fn called_once_failure_too_little() {
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_foo()
+        .called_once()
+        .return_result_of(|| 10);
+    mock.set_foo(method);
+}
+
