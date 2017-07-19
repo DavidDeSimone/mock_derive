@@ -97,6 +97,22 @@ fn it_works() {
     assert!(result3 == 1);
 }
 
+// You can also pass in a lambda to return a value. This can be used to return a value
+// an infinite number of times
+#[test]
+fn return_result_of() {
+    let mut x = 15;
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_bar().return_result_of(move || {
+        x += 1;
+        Some(x)
+    });
+
+    mock.set_bar(method);
+    assert!(mock.bar() == Some(16));
+    assert!(mock.bar() == Some(17));
+    assert!(mock.bar() == Some(18));
+}
 
 #[test]
 fn parameter_type_test() {
@@ -117,20 +133,6 @@ fn parameter_type_test() {
     assert!(mock.bar() == None);
     assert!(mock.bar() == None);
     assert!(mock.bar() == Some(1));
-}
-
-// You can also pass in a lambda to return a value. This can be used to return a value
-// an infinite number of times
-#[test]
-fn return_result_of() {
-    let x = Some(12);
-    let mut mock = MockHelloWorld::new();
-    let method = mock.method_bar()
-        .return_result_of(move || x);
-
-    mock.set_bar(method);
-    assert!(mock.bar() == Some(12));
-    assert!(mock.bar() == Some(12));
 }
 
 // You can also specify the total number of calls (i.e. once, 5 times, at least 5 times, at most 10 times, etc.)
