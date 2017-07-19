@@ -105,25 +105,18 @@ fn parameter_type_test() {
         .first_call()
         .set_result(Some(11))
         .nth_call(2) // equiv to 'second_call'
-        .set_result(None);
+        .set_result(None)
+	.nth_call(3)
+	.set_result(None)
+	.nth_call(4)
+	.set_result(Some(1));
 
     mock.set_bar(method);
-
-    let result = mock.bar();
-    assert!(result == Some(11));
+    
+    assert!(mock.bar() == Some(11));
     assert!(mock.bar() == None);
-}
-
-#[test]
-fn parameter_gen_test() {
-    let mut mock = MockHelloWorld::new();
-    let method = mock.method_baz()
-        .first_call()
-	.set_result(Foo::new());
-
-    mock.set_baz(method);
-    let result = mock.baz(32);
-    assert!(result.x == 0 && result.y == 0);
+    assert!(mock.bar() == None);
+    assert!(mock.bar() == Some(1));
 }
 
 // You can also pass in a lambda to return a value. This can be used to return a value
@@ -179,6 +172,49 @@ fn called_once_failure_too_little() {
     mock.set_foo(method);
     // Foo is never called, this will panic on completion.
 }
+
+```
+
+## GENERICS
+
+As of mock_derive 0.5.0, we have (basic) support for generics. Check out tests/src/generics.rs for more examples.
+``` rust
+#[mock]
+trait GenericTrait<T, U>
+      where T: Clone {
+      fn merge(&self, t: T, u: U) -> U;
+}
+
+#[test]
+fn generic_test_one() {
+    let mut mock = MockGenericTrait::<f32, i32>::new();
+    let method = mock.method_merge()
+        .called_once()
+        .set_result(30);
+
+    mock.set_merge(method);
+    assert!(mock.merge(15.0, 15) == 30);
+}
+
+#[mock]
+trait LifetimeTrait<'a, T>
+    where T: 'a {
+    fn return_value(&self, t: T) -> &'a T;
+}
+
+static TEST_FLOAT: f32 = 1.0;
+
+#[test]
+fn generics_and_lifetime() {
+    let mut mock = MockLifetimeTrait::<'static, f32>::new();
+    let method = mock.method_return_value()
+        .called_once()
+        .set_result(&TEST_FLOAT);
+
+    mock.set_return_value(method);
+    assert!(mock.return_value(TEST_FLOAT.clone()) == &TEST_FLOAT);
+}
+
 
 ```
 

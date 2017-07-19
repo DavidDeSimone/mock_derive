@@ -34,6 +34,12 @@ trait GenericTrait<T, U, Z>
 }
 
 #[mock]
+trait GenericTraitForMerging<T, U>
+      where T: Clone {
+      fn merge(&self, t: T, u: U) -> U;
+}
+
+#[mock]
 trait LifetimeTrait<'a, T>
     where T: 'a {
     fn return_value(&self, t: T) -> &'a T;
@@ -51,6 +57,18 @@ fn generic_test_one() {
     mock.mix_and_match(arg1, &arg2, &mut arg3);
 }
 
+
+#[test]
+fn generic_test_two() {
+    let mut mock = MockGenericTraitForMerging::<f32, i32>::new();
+    let method = mock.method_merge()
+        .called_once()
+        .set_result(30);
+
+    mock.set_merge(method);
+    assert!(mock.merge(15.0, 15) == 30);
+}
+
 #[allow(dead_code)]
 static TEST_FLOAT: f32 = 1.0;
 
@@ -62,5 +80,5 @@ fn generics_and_lifetime() {
         .set_result(&TEST_FLOAT);
 
     mock.set_return_value(method);
-    mock.return_value(TEST_FLOAT.clone());
+    assert!(mock.return_value(TEST_FLOAT.clone()) == &TEST_FLOAT);
 }
