@@ -211,7 +211,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                     call_num: ::std::sync::Mutex::new(1),
                     current_num: ::std::sync::Mutex::new(1),
                     retval: ::std::sync::Mutex::new(::std::collections::HashMap::new()),
-                    lambda: None,
+                    lambda: ::std::sync::Mutex::new(None),
                     should_never_be_called: false,
                     max_calls: None,
                     min_calls: None,
@@ -318,7 +318,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             call_num: ::std::sync::Mutex<usize>,
             current_num: ::std::sync::Mutex<usize>,
             retval: ::std::sync::Mutex<::std::collections::HashMap<usize, __RESULT_NAME>>,
-            lambda: Option<Box<Fn() -> __RESULT_NAME>>,
+            lambda: ::std::sync::Mutex<Option<Box<FnMut() -> __RESULT_NAME>>>,
             should_never_be_called: bool,
             max_calls: Option<usize>,
             min_calls: Option<usize>,
@@ -360,8 +360,12 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
 
             pub fn set_result(self, retval: __RESULT_NAME) -> Self {
-                if self.lambda.is_some() {
-                    panic!("Attempting to call set_result with after 'return_result_of' has been called. These two APIs are mutally exclusive, and should not be used together");
+                {
+                    let lambda = self.lambda.lock().unwrap();
+                    if lambda.is_some() {
+                        panic!("Attempting to call set_result with after 'return_result_of' has been called. These two APIs are mutally exclusive, and should not be used together");
+                    }
+                    
                 }
                 
                 {
@@ -426,9 +430,10 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 if self.exceedes_max_calls(current_num) {
                     panic!("Method failed 'called at most', current number of calls is {}", current_num);
                 }
-                
-                match self.lambda {
-                    Some(ref lm) => {
+
+                let mut lambda_result = self.lambda.lock().unwrap();
+                match *lambda_result {
+                    Some(ref mut lm) => {
                         Some(lm())
                     },
                     None => {
@@ -438,9 +443,12 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
                 }                
             }
 
-            pub fn return_result_of<F: 'static>(mut self, lambda: F) -> Self
-                where F: Fn() -> __RESULT_NAME {
-                self.lambda = Some(Box::new(lambda));
+            pub fn return_result_of<F: 'static>(self, lambda: F) -> Self
+                where F: FnMut() -> __RESULT_NAME {
+                {
+                    let mut lambda_result = self.lambda.lock().unwrap();
+                    *lambda_result = Some(Box::new(lambda));
+                }
                 self
             }
         }

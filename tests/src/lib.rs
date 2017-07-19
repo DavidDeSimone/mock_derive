@@ -175,13 +175,29 @@ fn return_result_of() {
 }
 
 #[test]
+fn mut_result_of() {
+    let mut x = 15;
+    let mut mock = MockHelloWorld::new();
+    let method = mock.method_bar()
+        .return_result_of(move || {
+            x += 1;
+            Some(x)
+        });
+
+    mock.set_bar(method);
+    assert!(mock.bar() == Some(16));
+    assert!(mock.bar() == Some(17));
+    assert!(mock.bar() == Some(18));
+}
+
+#[test]
 #[should_panic]
 fn return_result_of_and_set_result() {
     let x = Some(12);
     let mock = MockHelloWorld::new();
-    mock.method_bar().return_result_of(move || x).set_result(
-        Some(13),
-    );
+    mock.method_bar()
+        .return_result_of(move || x)
+        .set_result(Some(13));
 }
 
 #[test]
