@@ -266,57 +266,43 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: syn::Item) -> quote::Tokens {
             fallback.#name_stream(#args_with_no_self_no_types)
         };
 
+        let return_statement;
+        let retval_statement;
+        let some_arg;
         if no_return {
-            method_impls = quote! {
-                #method_impls
-                #unsafety fn #name_stream(#args_with_types) {
-                    // The user has called a method
-                    match self.#name_stream.as_ref() {
-                        Some(method) => {
-                            match method.call() {
-                                Some(_) => {
-                                    // The mock has completed its duty.
-                                },
-
-                                None => {
-                                    #fallback;
-                                }
-                            }
-                        },
-
-                        None => {
-                            // Check if there is a fallback
-                            #fallback;
-                        }
-                    }
-                }
-            };
+            return_statement = quote::Tokens::new();
+            retval_statement = quote::Tokens::new();
+            some_arg = quote! { _ };
         } else {
-            method_impls = quote! {
-                #method_impls
-                #unsafety fn #name_stream(#args_with_types) -> #return_type {
-                    match self.#name_stream.as_ref() {
-                        Some(method) => {
-                            match method.call() {
-                                Some(retval) => {
-                                    // The mock has completed its duty.
-                                    retval
-                                },
+            return_statement = quote! { -> #return_type };
+            retval_statement = quote! { retval };
+            some_arg = quote! { retval };
+        }
 
-                                None => {
-                                    #fallback
-                                }
+        method_impls = quote! {
+            #method_impls
+            #unsafety fn #name_stream(#args_with_types) #return_statement {
+                match self.#name_stream.as_ref() {
+                    Some(method) => {
+                        match method.call() {
+                            Some(#some_arg) => {
+                                // The mock has completed its duty.
+                                #retval_statement
+                            },
+                            
+                            None => {
+                                #fallback
                             }
-                        },
-
-                        None => {
-                            // Check if there is a fallback
-                            #fallback
                         }
+                    },
+                    
+                    None => {
+                        // Check if there is a fallback
+                        #fallback
                     }
                 }
-            };
-        }
+            }
+        };
     }    
 
     let stream = quote! {
