@@ -48,7 +48,7 @@ struct TraitBlock {
 }
 
 struct ImplBlock {
-
+    impl_name: quote::Tokens,
 }
 
 enum Mockable {
@@ -85,15 +85,21 @@ fn parse_block(item: &syn::Item) -> Mockable {
                     _ => { }
                 }
             }
+
+            Mockable::Trait(TraitBlock { trait_name: trait_name,
+                                         vis: vis,
+                                         generics: quote! { <#generic_tokens> },
+                                         where_clause: where_clause,
+                                         funcs: result})
+        },
+
+        syn::ItemKind::Impl(_unsafety, ref _iml_polarity, ref _generics, ref _opt_path, ref _ty, ref _items) => {
+            Mockable::Impl(ImplBlock {
+                impl_name: trait_name,
+            })
         },
         _ => { panic!("#[mock] must be applied to a Trait declaration."); }
-    };
-
-    Mockable::Trait(TraitBlock { trait_name: trait_name,
-                       vis: vis,
-                       generics: quote! { <#generic_tokens> },
-                       where_clause: where_clause,
-                       funcs: result})
+    }
 }
 
 fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Mutability) {
