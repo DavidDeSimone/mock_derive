@@ -100,8 +100,7 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Muta
     let mut argc = 0;
     let mut args_with_types = quote::Tokens::new();
     let mut args_with_no_self_no_types = quote::Tokens::new();
-    // @TODO this is a really dumb way of handling this problem, and should be fixed in the future
-    let arg_names = vec![quote!{a}, quote!{b}, quote!{c}, quote!{d}, quote!{e}, quote!{f}, quote!{g}, quote!{h}];
+    let arg_name = quote!{a};
     let mut is_instance_method = false;
     let mut mutable_status = syn::Mutability::Immutable;
     for input in decl {
@@ -136,12 +135,8 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Muta
                 is_instance_method = true;
                 argc += 1;
             },
-            syn::FnArg::Captured(_pat, ty) => {
-                if argc > arg_names.len() {
-                    panic!("You are attempting to mock a function with a number of arguments larger then the maximum number of supported arguments");
-                }
-                
-                let tok = arg_names[argc].clone();
+            syn::FnArg::Captured(_pat, ty) => {                
+                let tok = concat_idents(arg_name.as_str(), format!("{}", argc).as_str());
                 args_with_types = quote! {
                     #args_with_types, #tok : #ty 
                 };
