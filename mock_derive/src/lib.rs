@@ -25,7 +25,6 @@ SOFTWARE.
 #![feature(proc_macro)]
 #![recursion_limit = "256"]
 
-//#[macro_use]
 extern crate syn;
 #[macro_use]
 extern crate quote;
@@ -40,8 +39,24 @@ struct Function {
     pub safety: syn::Unsafety
 }
 
-// @TODO make this a struct instead of a giant 4+ item tuple
-fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens, syn::Visibility, quote::Tokens, quote::Tokens) {
+struct TraitBlock {
+    trait_name: quote::Tokens,
+    vis: syn::Visibility,
+    generics: quote::Tokens,
+    where_clause: quote::Tokens,
+    funcs: Vec<Function>,
+}
+
+struct ImplBlock {
+
+}
+
+enum Mockable {
+    Impl(ImplBlock),
+    Trait(TraitBlock),
+}
+
+fn parse_block(item: &syn::Item) -> Mockable {
     let mut result = Vec::new();
     let ident_name = item.ident.clone();
     let trait_name = quote! { #ident_name };
@@ -74,7 +89,11 @@ fn parse_impl(item: &syn::Item) -> (Vec<Function>, quote::Tokens, syn::Visibilit
         _ => { panic!("#[mock] must be applied to a Trait declaration."); }
     };
 
-    (result, trait_name, vis, quote! { <#generic_tokens> }, where_clause)
+    Mockable::Trait(TraitBlock { trait_name: trait_name,
+                       vis: vis,
+                       generics: quote! { <#generic_tokens> },
+                       where_clause: where_clause,
+                       funcs: result})
 }
 
 fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Mutability) {
@@ -160,11 +179,13 @@ fn parse_return_type(output: syn::FunctionRetTy) -> (bool, quote::Tokens) {
     }
 }
 
-#[proc_macro_attribute]
-pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
-    let impl_item = syn::parse_item(&impl_ts.to_string()).unwrap();
-
-    let (trait_functions, trait_name, vis, generics, where_clause) = parse_impl(&impl_item);
+fn parse_trait(trait_block: TraitBlock, raw_trait: syn::Item) -> quote::Tokens {
+    let trait_name = trait_block.trait_name;
+    let vis = trait_block.vis;
+    let generics = trait_block.generics;
+    let where_clause = trait_block.where_clause;
+    let trait_functions = trait_block.funcs;
+    
     let mut mock_impl_methods = quote::Tokens::new();
     let mut fields = quote::Tokens::new();
     let mut ctor = quote::Tokens::new();
@@ -304,7 +325,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     }    
 
     let stream = quote! {
-        #impl_item
+        #raw_trait
 
         #[allow(dead_code)]
         #pubtok struct #impl_name #generics #where_clause {
@@ -481,6 +502,27 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             #method_impls
         }
         
+    };
+
+    stream
+}
+
+fn parse_impl(impl_block: ImplBlock, raw_impl: syn::Item) -> quote::Tokens {
+    quote! { #raw_impl }
+}
+
+#[proc_macro_attribute]
+pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
+    let raw_item = syn::parse_item(&impl_ts.to_string()).unwrap();
+
+    let stream = match parse_block(&raw_item) {
+        Mockable::Impl(impl_block) => {
+            parse_impl(impl_block, raw_item)
+        },
+
+        Mockable::Trait(trait_block) => {
+            parse_trait(trait_block, raw_item)
+        }
     };
 
     TokenStream::from_str(stream.as_str()).unwrap()
