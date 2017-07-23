@@ -527,7 +527,7 @@ fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, initfn: quote::Token
         }
         
         unsafe impl<T: Sync> Sync for #struct_name<T> {}
-        static mut #ident: #struct_name<#ty> = #struct_name(0 as *const #ty, ::std::sync::ONCE_INIT);
+        static #ident: #struct_name<#ty> = #struct_name(0 as *const #ty, ::std::sync::ONCE_INIT);
         impl ::std::ops::Deref for #struct_name<#ty> {
             type Target = #ty;
             fn deref(&self) -> &#ty {
@@ -540,13 +540,27 @@ fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, initfn: quote::Token
 }
 
 fn parse_impl(impl_block: ImplBlock, raw_impl: syn::Item) -> quote::Tokens {
-    let fns = quote::Tokens::new();
+    let mut fns = quote::Tokens::new();
     let ident = impl_block.impl_name;
     for fnc in impl_block.funcs {
+        let name = quote! { name };//concat_idents("method_", fnc.name.as_str());
+        let setter = quote!{ setter };//concat_idents("set_", fnc.name.as_str());
+        let stat = make_mut_static(quote!{ GBL }, quote!{ ::std::sync::Mutex<i32> }, quote!{
+            std::sync::Mutex::new(0)
+        });
         
+        fns = quote! {
+            #stat
+            #fns
+            fn #name() /* -> MockMethodName */ {
+            }
+
+            fn #setter(/* method: MockMethodName */) {
+
+            }
+        }
     }
 
-    
     quote! {
         impl #ident {
 
