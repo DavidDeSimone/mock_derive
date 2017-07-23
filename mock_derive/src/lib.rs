@@ -49,6 +49,7 @@ struct TraitBlock {
 
 struct ImplBlock {
     impl_name: quote::Tokens,
+    funcs: Vec<Function>,
 }
 
 enum Mockable {
@@ -90,12 +91,27 @@ fn parse_block(item: &syn::Item) -> Mockable {
                                          vis: vis,
                                          generics: quote! { <#generic_tokens> },
                                          where_clause: where_clause,
-                                         funcs: result})
+                                         funcs: result
+            })
         },
 
-        syn::ItemKind::Impl(_unsafety, ref _iml_polarity, ref _generics, ref _opt_path, ref _ty, ref _items) => {
+        syn::ItemKind::Impl(_unsafety, ref _iml_polarity, ref _generics, ref opt_path, ref ty, ref items) => {
+            if opt_path.is_some() {
+                panic!("Mocking impl blocks for implementation is not yet supported. You can only mock 'raw' impl blocks.");
+            }
+
+            for item in items {
+                match item.node {
+                    syn::ImplItemKind::Method(ref sig, ref _block) => {
+                        result.push(Function {name: item.ident.clone(), decl: sig.decl.clone(), safety: sig.unsafety.clone() } );
+                    },
+                    _ => { }
+                }
+            }
+            
             Mockable::Impl(ImplBlock {
-                impl_name: trait_name,
+                impl_name: quote! { #ty },
+                funcs: result
             })
         },
         _ => { panic!("#[mock] must be applied to a Trait declaration."); }
@@ -494,8 +510,48 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: syn::Item) -> quote::Tokens {
     stream
 }
 
+fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, initfn: quote::Tokens) -> quote::Tokens {
+    let struct_name = concat_idents("__MutStatic", ident.as_str());
+    quote! {
+        struct #struct_name<T: Sync>(*const T, ::std::sync::Once);
+        impl<T: Sync> #struct_name<T> {
+            pub fn fetch<F>(&'static mut self, f: F) -> &T
+                where F: FnOnce() -> T
+            {
+                unsafe {
+                    let refval = &mut self.0;
+                    self.1.call_once(|| { *refval = Box::into_raw(Box::new(f())); });
+                    &*self.0
+                }
+            }
+        }
+        
+        unsafe impl<T: Sync> Sync for #struct_name<T> {}
+        static mut #ident: #struct_name<#ty> = #struct_name(0 as *const #ty, ::std::sync::ONCE_INIT);
+        impl ::std::ops::Deref for #struct_name<#ty> {
+            type Target = #ty;
+            fn deref(&self) -> &#ty {
+                unsafe {
+                    #ident.fetch(|| { #initfn })
+                }
+            }
+        }
+    }
+}
+
 fn parse_impl(impl_block: ImplBlock, raw_impl: syn::Item) -> quote::Tokens {
-    quote! { #raw_impl }
+    let fns = quote::Tokens::new();
+    let ident = impl_block.impl_name;
+    for fnc in impl_block.funcs {
+        
+    }
+
+    
+    quote! {
+        impl #ident {
+
+        }
+    }
 }
 
 #[proc_macro_attribute]
