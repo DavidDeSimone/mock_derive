@@ -47,13 +47,12 @@ struct TraitBlock {
     funcs: Vec<Function>,
 }
 
-struct ImplBlock {
-    impl_name: quote::Tokens,
-    funcs: Vec<Function>,
+struct ForeignFunctionBlock {
+    funcs: Vec<Function>
 }
 
 enum Mockable {
-    Impl(ImplBlock),
+    ForeignFunctions(ForeignFunctionBlock),
     Trait(TraitBlock),
 }
 
@@ -94,27 +93,12 @@ fn parse_block(item: &syn::Item) -> Mockable {
                                          funcs: result
             })
         },
-
-        syn::ItemKind::Impl(_unsafety, ref _iml_polarity, ref _generics, ref opt_path, ref ty, ref items) => {
-            if opt_path.is_some() {
-                panic!("Mocking impl blocks for implementation is not yet supported. You can only mock 'raw' impl blocks.");
-            }
-
-            for item in items {
-                match item.node {
-                    syn::ImplItemKind::Method(ref sig, ref _block) => {
-                        result.push(Function {name: item.ident.clone(), decl: sig.decl.clone(), safety: sig.unsafety.clone() } );
-                    },
-                    _ => { }
-                }
-            }
-            
-            Mockable::Impl(ImplBlock {
-                impl_name: quote! { #ty },
-                funcs: result
+        syn::ItemKind::ForeignMod(ref _mod) => {
+            Mockable::ForeignFunctions(ForeignFunctionBlock {
+                funcs: Vec::new()
             })
         },
-        _ => { panic!("#[mock] must be applied to a Trait declaration."); }
+        _ => { panic!("#[mock] must be applied to a trait declaration OR a extern block."); }
     }
 }
 
@@ -510,60 +494,41 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: syn::Item) -> quote::Tokens {
     stream
 }
 
+fn parse_foreign_functions(func_block: ForeignFunctionBlock, raw_block: syn::Item) -> quote::Tokens {
+    quote! { #raw_block }
+}
+
+// https://stackoverflow.com/questions/27791532/how-do-i-create-a-global-mutable-singleton
+// @TODO update this to make it work.
 fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, initfn: quote::Tokens) -> quote::Tokens {
     let struct_name = concat_idents("__MutStatic", ident.as_str());
     quote! {
-        struct #struct_name<T: Sync>(*const T, ::std::sync::Once);
-        impl<T: Sync> #struct_name<T> {
-            pub fn fetch<F>(&'static mut self, f: F) -> &T
-                where F: FnOnce() -> T
-            {
-                unsafe {
-                    let refval = &mut self.0;
-                    self.1.call_once(|| { *refval = Box::into_raw(Box::new(f())); });
-                    &*self.0
-                }
-            }
+        #[derive(Clone)]
+        struct SingletonReader {
+            // Since we will be used in many threads, we need to protect
+            // concurrent access
+            inner: Arc<Mutex<u8>>
         }
         
-        unsafe impl<T: Sync> Sync for #struct_name<T> {}
-        static #ident: #struct_name<#ty> = #struct_name(0 as *const #ty, ::std::sync::ONCE_INIT);
-        impl ::std::ops::Deref for #struct_name<#ty> {
-            type Target = #ty;
-            fn deref(&self) -> &#ty {
-                unsafe {
-                    #ident.fetch(|| { #initfn })
-                }
+        fn singleton() -> SingletonReader {
+            // Initialize it to a null value
+            static mut SINGLETON: *const SingletonReader = 0 as *const SingletonReader;
+            static ONCE: Once = ONCE_INIT;
+
+            unsafe {
+                ONCE.call_once(|| {
+                    // Make it
+                    let singleton = SingletonReader {
+                        inner: Arc::new(Mutex::new(0))
+                    };
+
+                    // Put it in the heap so it can outlive this call
+                    SINGLETON = mem::transmute(Box::new(singleton));
+                });
+
+                // Now we give out a copy of the data that is safe to use concurrently.
+                (*SINGLETON).clone()
             }
-        }
-    }
-}
-
-fn parse_impl(impl_block: ImplBlock, raw_impl: syn::Item) -> quote::Tokens {
-    let mut fns = quote::Tokens::new();
-    let ident = impl_block.impl_name;
-    for fnc in impl_block.funcs {
-        let name = quote! { name };//concat_idents("method_", fnc.name.as_str());
-        let setter = quote!{ setter };//concat_idents("set_", fnc.name.as_str());
-        let stat = make_mut_static(quote!{ GBL }, quote!{ ::std::sync::Mutex<i32> }, quote!{
-            std::sync::Mutex::new(0)
-        });
-        
-        fns = quote! {
-            #stat
-            #fns
-            fn #name() /* -> MockMethodName */ {
-            }
-
-            fn #setter(/* method: MockMethodName */) {
-
-            }
-        }
-    }
-
-    quote! {
-        impl #ident {
-
         }
     }
 }
@@ -573,8 +538,8 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let raw_item = syn::parse_item(&impl_ts.to_string()).unwrap();
 
     let stream = match parse_block(&raw_item) {
-        Mockable::Impl(impl_block) => {
-            parse_impl(impl_block, raw_item)
+        Mockable::ForeignFunctions(impl_block) => {
+            parse_foreign_functions(impl_block, raw_item)
         },
 
         Mockable::Trait(trait_block) => {
