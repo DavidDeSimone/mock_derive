@@ -47,12 +47,8 @@ struct TraitBlock {
     funcs: Vec<Function>,
 }
 
-struct ForeignFunctionBlock {
-    funcs: Vec<Function>
-}
-
 enum Mockable {
-    ForeignFunctions(ForeignFunctionBlock),
+    ForeignFunctions(syn::ForeignMod),
     Trait(TraitBlock),
 }
 
@@ -93,10 +89,8 @@ fn parse_block(item: &syn::Item) -> Mockable {
                                          funcs: result
             })
         },
-        syn::ItemKind::ForeignMod(ref _mod) => {
-            Mockable::ForeignFunctions(ForeignFunctionBlock {
-                funcs: Vec::new()
-            })
+        syn::ItemKind::ForeignMod(ref fmod) => {
+            Mockable::ForeignFunctions(fmod.clone())
         },
         _ => { panic!("#[mock] must be applied to a trait declaration OR a extern block."); }
     }
@@ -494,40 +488,87 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: syn::Item) -> quote::Tokens {
     stream
 }
 
-fn parse_foreign_functions(func_block: ForeignFunctionBlock, raw_block: syn::Item) -> quote::Tokens {
-    quote! { #raw_block }
+fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) -> quote::Tokens {
+    let mut result = quote::Tokens::new();
+    // @TODO This is the hardcoded result for our first test. We will slowly make this more generic.
+    let external_static = make_mut_static(quote! { StaticExternMocks }, quote! { ExternMocks }, quote!{
+        ExternMocks { method_c_double: None }
+    });
+    for item in func_block.items {
+        result = quote! {
+            struct Method_c_double;
+            impl Method_c_double {
+                fn first_call(self) -> Self {
+                    self
+                }
+
+                fn set_result(mut self, _x: isize) -> Self {
+                    self
+                }
+            }
+        
+            struct ExternMocks {
+                method_c_double: Option<Method_c_double>
+            }
+            
+            #external_static
+            
+            impl ExternMocks {
+                fn method_c_double() -> Method_c_double {
+                    Method_c_double { }
+                }
+                
+                fn set_c_double(x: Method_c_double) {
+                    let value = StaticExternMocks();
+                    let mut singleton = value.inner.lock().unwrap();
+                    singleton.method_c_double = Some(x);
+                }
+                
+            }
+
+            // this should always be unsafe to emulate linking static fns being unsafe.
+            unsafe extern "C" fn c_double(x: isize) -> isize {
+                2
+            }
+        }
+    }
+    
+    quote! { #result }
 }
 
 // https://stackoverflow.com/questions/27791532/how-do-i-create-a-global-mutable-singleton
-// @TODO update this to make it work.
-fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, initfn: quote::Tokens) -> quote::Tokens {
-    let struct_name = concat_idents("__MutStatic", ident.as_str());
+fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, init_body: quote::Tokens) -> quote::Tokens {
+    let reader_name = concat_idents("__SingletonReader_", ident.as_str());
+    let singleton_name = concat_idents("__SINGLETON_", ident.as_str());
     quote! {
         #[derive(Clone)]
-        struct SingletonReader {
+        struct #reader_name {
             // Since we will be used in many threads, we need to protect
             // concurrent access
-            inner: Arc<Mutex<u8>>
+            inner: ::std::sync::Arc<::std::sync::Mutex<#ty>>
         }
         
-        fn singleton() -> SingletonReader {
+        fn #ident() -> #reader_name {
             // Initialize it to a null value
-            static mut SINGLETON: *const SingletonReader = 0 as *const SingletonReader;
-            static ONCE: Once = ONCE_INIT;
+            static mut #singleton_name: *const #reader_name = 0 as *const #reader_name;
+            static ONCE: ::std::sync::Once = ::std::sync::ONCE_INIT;
 
             unsafe {
                 ONCE.call_once(|| {
                     // Make it
-                    let singleton = SingletonReader {
-                        inner: Arc::new(Mutex::new(0))
+                    let init_fn = || {
+                        #init_body
+                    };
+                    let singleton = #reader_name {
+                        inner: ::std::sync::Arc::new(::std::sync::Mutex::new(init_fn()))
                     };
 
                     // Put it in the heap so it can outlive this call
-                    SINGLETON = mem::transmute(Box::new(singleton));
+                    #singleton_name = ::std::mem::transmute(::std::boxed::Box::new(singleton));
                 });
 
                 // Now we give out a copy of the data that is safe to use concurrently.
-                (*SINGLETON).clone()
+                (*#singleton_name).clone()
             }
         }
     }
