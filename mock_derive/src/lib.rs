@@ -495,9 +495,12 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
         ExternMocks { method_c_double: None }
     });
     for item in func_block.items {
+        let ref item_ident = item.ident;
+        let base_name = quote!{ #item_ident };
+        let name = concat_idents("Method_", base_name.as_str());
         result = quote! {
-            struct Method_c_double;
-            impl Method_c_double {
+            struct #name;
+            impl #name {
                 fn first_call(self) -> Self {
                     self
                 }
@@ -508,17 +511,17 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
             }
         
             struct ExternMocks {
-                method_c_double: Option<Method_c_double>
+                method_c_double: Option<#name>
             }
             
             #external_static
             
             impl ExternMocks {
-                fn method_c_double() -> Method_c_double {
-                    Method_c_double { }
+                fn method_c_double() -> #name {
+                    #name { }
                 }
                 
-                fn set_c_double(x: Method_c_double) {
+                fn set_c_double(x: #name) {
                     let value = StaticExternMocks();
                     let mut singleton = value.inner.lock().unwrap();
                     singleton.method_c_double = Some(x);
@@ -528,7 +531,13 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
 
             // this should always be unsafe to emulate linking static fns being unsafe.
             unsafe extern "C" fn c_double(x: isize) -> isize {
-                2
+                let value = StaticExternMocks();
+                let mut singleton = value.inner.lock().unwrap();
+                if let Some(ref method) = singleton.method_c_double {
+                    2
+                } else {
+                    panic!();
+                }
             }
         }
     }
@@ -550,25 +559,35 @@ fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, init_body: quote::To
         
         fn #ident() -> #reader_name {
             // Initialize it to a null value
-            static mut #singleton_name: *const #reader_name = 0 as *const #reader_name;
-            static ONCE: ::std::sync::Once = ::std::sync::ONCE_INIT;
+            thread_local! {
+                static #singleton_name: ::std::cell::RefCell<*const #reader_name> = ::std::cell::RefCell::new(0 as *const #reader_name);
+                static ONCE: ::std::sync::Once = ::std::sync::ONCE_INIT;
+            }
+
 
             unsafe {
-                ONCE.call_once(|| {
-                    // Make it
-                    let init_fn = || {
-                        #init_body
-                    };
-                    let singleton = #reader_name {
-                        inner: ::std::sync::Arc::new(::std::sync::Mutex::new(init_fn()))
-                    };
-
-                    // Put it in the heap so it can outlive this call
-                    #singleton_name = ::std::mem::transmute(::std::boxed::Box::new(singleton));
+                ONCE.with(|once| {
+                    let x: &'static ::std::sync::Once = unsafe { ::std::mem::transmute(once) };
+                    x.call_once(|| {
+                        // Make it
+                        let init_fn = || {
+                            #init_body
+                        };
+                        let singleton = #reader_name {
+                            inner: ::std::sync::Arc::new(::std::sync::Mutex::new(init_fn()))
+                        };
+                        
+                        // Put it in the heap so it can outlive this call
+                        #singleton_name.with(|f| {
+                            *f.borrow_mut() = ::std::mem::transmute(::std::boxed::Box::new(singleton));
+                        });
+                    });
                 });
 
                 // Now we give out a copy of the data that is safe to use concurrently.
-                (*#singleton_name).clone()
+                #singleton_name.with(|f| {
+                    (**f.borrow()).clone()
+                })
             }
         }
     }
