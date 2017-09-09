@@ -523,6 +523,7 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: syn::Item) -
                 let name = concat_idents("Method_", base_name.as_str());
                 let name_lc = concat_idents("method_", base_name.as_str());
                 let setter_name = concat_idents("set_", base_name.as_str());
+                let clear_name = concat_idents("clear_", base_name.as_str());
                 extern_mocks_ctor_args = quote!{ #extern_mocks_ctor_args #name_lc: None, };
                 extern_mocks_def = quote!{ #extern_mocks_def #name_lc: Option<#name<#return_type>>, };
                 let pubtok;
@@ -556,6 +557,13 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: syn::Item) -
                             let value = StaticExternMocks();
                             let mut singleton = value.inner.lock().unwrap();
                             singleton.#name_lc = Some(x);
+                        }
+
+                        #[allow(dead_code)]
+                        fn #clear_name () {
+                            let value = StaticExternMocks();
+                            let mut singleton = value.inner.lock().unwrap();
+                            singleton.#name_lc = None;
                         }
                         
                     }
@@ -621,7 +629,6 @@ fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, init_body: quote::To
         }
 
         #[allow(non_snake_case)]
-        #[allow(unused_unsafe)]
         fn #ident() -> #reader_name {
             thread_local! {
                 #[allow(non_upper_case_globals)]
@@ -633,7 +640,8 @@ fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, init_body: quote::To
 
             unsafe {
                 ONCE.with(|once| {
-                    let x: &'static ::std::sync::Once = unsafe { ::std::mem::transmute(once) };
+                    // This is horrible, but just TRY and stop me!
+                    let x: &'static ::std::sync::Once = ::std::mem::transmute(once);
                     x.call_once(|| {
                         // Make it
                         let init_fn = || {

@@ -5,6 +5,7 @@ extern "C" {
     fn c_double(x: isize) -> isize;
     fn c_div(x: isize, y: isize) -> isize;
     fn side_effect_fn(x: usize, y: usize);
+    fn no_args_no_ret();
 }
 
 
@@ -38,4 +39,16 @@ fn extern_c_test_2() {
 #[should_panic]
 fn extern_c_panic() {
     unsafe { c_div(0, 0); }
+}
+
+#[test]
+#[should_panic]
+fn extern_min_calls() {
+    let mock = ExternMocks::method_c_double()
+        .called_once();
+    
+    ExternMocks::set_c_double(mock);
+    
+    // Needed to trigger 'min call' related errors for extern fns
+    ExternMocks::clear_c_double();
 }
