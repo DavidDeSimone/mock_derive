@@ -137,14 +137,25 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Muta
             },
             syn::FnArg::Captured(_pat, ty) => {                
                 let tok = concat_idents(arg_name.as_str(), format!("{}", argc).as_str());
-                args_with_types = quote! {
-                    #args_with_types, #tok : #ty 
-                };
-                if argc == 1 {
+                if argc == 0 {
+                    args_with_types = quote! {
+                        #tok: #ty
+                    };
+                    
+                    args_with_no_self_no_types = quote! {
+                        #tok
+                    };
+                } else if argc == 1 {
+                    args_with_types = quote! {
+                        #args_with_types, #tok : #ty 
+                    };
                     args_with_no_self_no_types = quote! {
                         #tok
                     }
                 } else {
+                    args_with_types = quote! {
+                        #args_with_types, #tok : #ty 
+                    };
                     args_with_no_self_no_types = quote! {
                         #args_with_no_self_no_types, #tok
                     };
@@ -157,6 +168,14 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Muta
     }
 
     (args_with_types, args_with_no_self_no_types, mutable_status, is_instance_method)
+}
+
+fn make_return_tokens(no_return: bool, return_type: quote::Tokens) -> (quote::Tokens, quote::Tokens, quote::Tokens) {
+    if no_return {
+        (quote::Tokens::new(), quote::Tokens::new(), quote! { _ })
+    } else {
+        (quote! { -> #return_type }, quote! { retval }, quote! { retval })
+    }
 }
 
 fn generate_mock_method_body(pubtok: quote::Tokens, mock_method_name: quote::Tokens) -> quote::Tokens {
@@ -419,18 +438,7 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: syn::Item) -> quote::Tokens {
             fallback.#name_stream(#args_with_no_self_no_types)
         };
 
-        let return_statement;
-        let retval_statement;
-        let some_arg;
-        if no_return {
-            return_statement = quote::Tokens::new();
-            retval_statement = quote::Tokens::new();
-            some_arg = quote! { _ };
-        } else {
-            return_statement = quote! { -> #return_type };
-            retval_statement = quote! { retval };
-            some_arg = quote! { retval };
-        }
+        let (return_statement, retval_statement, some_arg) = make_return_tokens(no_return, return_type.clone());
 
         method_impls = quote! {
             #method_impls
@@ -499,10 +507,7 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
     let mut result = quote::Tokens::new();
     let mut extern_mocks_ctor_args = quote!{};
     let mut extern_mocks_def = quote!{};
-    // @TODO This is the hardcoded result for our first test. We will slowly make this more generic.
-    let external_static = make_mut_static(quote! { StaticExternMocks }, quote! { ExternMocks }, quote!{
-        ExternMocks { method_c_double: None }
-    });
+
     for item in func_block.items {
         match item.node {
             syn::ForeignItemKind::Fn(ref decl, ref generics) => {
@@ -511,45 +516,41 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
                 }
 
                 let (args_with_types, args_with_no_self_no_types, mutability, _) = parse_args(decl.inputs.clone());
+                let (no_return, return_type) = parse_return_type(decl.clone().output);
                 
                 let ref item_ident = item.ident;
                 let base_name = quote!{ #item_ident };
                 let name = concat_idents("Method_", base_name.as_str());
                 let name_lc = concat_idents("method_", base_name.as_str());
+                let setter_name = concat_idents("set_", base_name.as_str());
                 extern_mocks_ctor_args = quote!{ #extern_mocks_ctor_args #name_lc: None, };
-                extern_mocks_def = quote!{ #extern_mocks_def #name_lc: Option<#name> };
+                extern_mocks_def = quote!{ #extern_mocks_def #name_lc: Option<#name<#return_type>>, };
                 let pubtok;
                 if item.vis == syn::Visibility::Public {
                     pubtok = quote!{ pub };
                 } else {
                     pubtok = quote!{};
                 }
-                
-                let _ = generate_mock_method_body(pubtok.clone(), quote!{ #name });
+                let (return_statement, retval_statement, some_arg) = make_return_tokens(no_return, return_type.clone());
+                let mock_method_body = generate_mock_method_body(pubtok.clone(), quote!{ #name });
                 result = quote! {
-                    struct #name;
-                    impl #name {
-                        fn first_call(self) -> Self {
-                            self
-                        }
-
-                        fn set_result(mut self, _x: isize) -> Self {
-                            self
-                        }
-                    }
-                    
-                    struct ExternMocks {
-                        method_c_double: Option<#name>
-                    }
-                    
-                    #external_static
+                    #result
+                    #mock_method_body
                     
                     impl ExternMocks {
-                        fn #name_lc () -> #name {
-                            #name { }
+                        pub fn #name_lc() -> #name<#return_type> {
+                            #name {
+                                call_num: ::std::sync::Mutex::new(1),
+                                current_num: ::std::sync::Mutex::new(1),
+                                retval: ::std::sync::Mutex::new(::std::collections::HashMap::new()),
+                                lambda: ::std::sync::Mutex::new(None),
+                                should_never_be_called: false,
+                                max_calls: None,
+                                min_calls: None,
+                            }
                         }
-                        
-                        fn set_c_double(x: #name) {
+
+                        fn #setter_name (x: #name<#return_type>) {
                             let value = StaticExternMocks();
                             let mut singleton = value.inner.lock().unwrap();
                             singleton.#name_lc = Some(x);
@@ -558,12 +559,18 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
                     }
 
                     // this should always be unsafe to emulate linking static fns being unsafe.
-                    #pubtok unsafe extern "C" fn #base_name (x: isize) -> isize {
+                    #pubtok unsafe extern "C" fn #base_name (#args_with_types) #return_statement {
                         let value = StaticExternMocks();
                         let mut singleton = value.inner.lock().unwrap();
                         if let Some(ref method) = singleton.#name_lc {
-                            // method.call()
-                            2
+                            match method.call() {
+                                Some(#some_arg) => {
+                                    #retval_statement
+                                },
+                                None => {
+                                    panic!("Called a static mock function without a value set.");
+                                }
+                            }
                         } else {
                             panic!();
                         }
@@ -571,10 +578,23 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
                 }
             },
             syn::ForeignItemKind::Static(ref _ty, _mutability) => {
-                // Mocking statics not yet supported.
+                panic!("Mocking statics not yet supported.");
             }
         }
     }
+
+    let external_static = make_mut_static(quote! { StaticExternMocks }, quote! { ExternMocks }, quote!{
+        ExternMocks { #extern_mocks_ctor_args }
+    });
+    result = quote!{
+        struct ExternMocks {
+            #extern_mocks_def
+        }
+
+        #external_static
+
+        #result
+    };
     
     quote! { #result }
 }
