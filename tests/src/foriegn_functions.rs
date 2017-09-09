@@ -33,3 +33,9 @@ fn extern_c_test_2() {
         assert!(c_div(0, 2) == 3);
     }
 }
+
+#[test]
+#[should_panic]
+fn extern_c_panic() {
+    unsafe { c_div(0, 0); }
+}

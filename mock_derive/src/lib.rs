@@ -503,19 +503,19 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: syn::Item) -> quote::Tokens {
     stream
 }
 
-fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) -> quote::Tokens {
+fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: syn::Item) -> quote::Tokens {
     let mut result = quote::Tokens::new();
     let mut extern_mocks_ctor_args = quote!{};
     let mut extern_mocks_def = quote!{};
 
     for item in func_block.items {
         match item.node {
-            syn::ForeignItemKind::Fn(ref decl, ref generics) => {
+            syn::ForeignItemKind::Fn(ref decl, ref _generics) => {
                 if decl.variadic {
                     panic!("Mocking variadic functions not yet supported. This will be added in the future.");
                 }
 
-                let (args_with_types, args_with_no_self_no_types, mutability, _) = parse_args(decl.inputs.clone());
+                let (args_with_types, _, _, _) = parse_args(decl.inputs.clone());
                 let (no_return, return_type) = parse_return_type(decl.clone().output);
                 
                 let ref item_ident = item.ident;
@@ -538,6 +538,7 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
                     #mock_method_body
                     
                     impl ExternMocks {
+                        #[allow(dead_code)]
                         pub fn #name_lc() -> #name<#return_type> {
                             #name {
                                 call_num: ::std::sync::Mutex::new(1),
@@ -550,6 +551,7 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
                             }
                         }
 
+                        #[allow(dead_code)]
                         fn #setter_name (x: #name<#return_type>) {
                             let value = StaticExternMocks();
                             let mut singleton = value.inner.lock().unwrap();
@@ -558,10 +560,11 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
                         
                     }
 
-                    // this should always be unsafe to emulate linking static fns being unsafe.
+                    #[allow(dead_code)]
+                    #[allow(unused_variables)]
                     #pubtok unsafe extern "C" fn #base_name (#args_with_types) #return_statement {
                         let value = StaticExternMocks();
-                        let mut singleton = value.inner.lock().unwrap();
+                        let singleton = value.inner.lock().unwrap();
                         if let Some(ref method) = singleton.#name_lc {
                             match method.call() {
                                 Some(#some_arg) => {
@@ -587,10 +590,15 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
         ExternMocks { #extern_mocks_ctor_args }
     });
     result = quote!{
+        
+        #[allow(dead_code)]
+        #[allow(unused_variables)]
         struct ExternMocks {
             #extern_mocks_def
         }
-
+        
+        #[allow(dead_code)]
+        #[allow(unused_variables)]
         #external_static
 
         #result
@@ -604,16 +612,20 @@ fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, init_body: quote::To
     let reader_name = concat_idents("__SingletonReader_", ident.as_str());
     let singleton_name = concat_idents("__SINGLETON_", ident.as_str());
     quote! {
+        #[allow(non_camel_case_types)]
         #[derive(Clone)]
         struct #reader_name {
             // Since we will be used in many threads, we need to protect
             // concurrent access
             inner: ::std::sync::Arc<::std::sync::Mutex<#ty>>
         }
-        
+
+        #[allow(non_snake_case)]
+        #[allow(unused_unsafe)]
         fn #ident() -> #reader_name {
-            // Initialize it to a null value
             thread_local! {
+                #[allow(non_upper_case_globals)]
+                #[allow(non_snake_case)]
                 static #singleton_name: ::std::cell::RefCell<*const #reader_name> = ::std::cell::RefCell::new(0 as *const #reader_name);
                 static ONCE: ::std::sync::Once = ::std::sync::ONCE_INIT;
             }
