@@ -659,6 +659,7 @@ fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, init_body: quote::To
     }
 }
 
+#[cfg(not(test))]
 #[proc_macro_attribute]
 pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let raw_item = syn::parse_item(&impl_ts.to_string()).unwrap();
@@ -674,6 +675,13 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     };
 
     TokenStream::from_str(stream.as_str()).unwrap()
+}
+
+#[cfg(test)]
+#[proc_macro_attribute]
+pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
+    let raw_item = syn::parse_item(&impl_ts.to_string()).unwrap();
+    TokenStream::from_str((quote!{ #raw_item }).as_str()).unwrap()
 }
 
 fn concat_idents(lhs: &str, rhs: &str) -> syn::Ident {
