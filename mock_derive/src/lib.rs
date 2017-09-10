@@ -503,7 +503,7 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: syn::Item) -> quote::Tokens {
     stream
 }
 
-fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: syn::Item) -> quote::Tokens {
+fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) -> quote::Tokens {
     let mut result = quote::Tokens::new();
     let mut extern_mocks_ctor_args = quote!{};
     let mut extern_mocks_def = quote!{};
@@ -600,6 +600,8 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: syn::Item) -
         ExternMocks { #extern_mocks_ctor_args }
     });
     result = quote!{
+        #[cfg(not(test))]
+        #raw_block
         
         #[allow(dead_code)]
         #[allow(unused_variables)]
