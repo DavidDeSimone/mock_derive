@@ -537,7 +537,8 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: syn::Item) -
                 result = quote! {
                     #result
                     #mock_method_body
-                    
+
+                    #[cfg(test)]
                     impl ExternMocks {
                         #[allow(dead_code)]
                         pub fn #name_lc() -> #name<#return_type> {
@@ -568,6 +569,7 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: syn::Item) -
                         
                     }
 
+                    #[cfg(test)]
                     #[allow(dead_code)]
                     #[allow(unused_variables)]
                     #pubtok unsafe extern "C" fn #base_name (#args_with_types) #return_statement {
@@ -628,6 +630,7 @@ fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, init_body: quote::To
             inner: ::std::sync::Arc<::std::sync::Mutex<#ty>>
         }
 
+        #[cfg(test)]
         #[allow(non_snake_case)]
         fn #ident() -> #reader_name {
             thread_local! {
@@ -667,7 +670,6 @@ fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, init_body: quote::To
     }
 }
 
-#[cfg(not(test))]
 #[proc_macro_attribute]
 pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     let raw_item = syn::parse_item(&impl_ts.to_string()).unwrap();
@@ -683,13 +685,6 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     };
 
     TokenStream::from_str(stream.as_str()).unwrap()
-}
-
-#[cfg(test)]
-#[proc_macro_attribute]
-pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
-    let raw_item = syn::parse_item(&impl_ts.to_string()).unwrap();
-    TokenStream::from_str((quote!{ #raw_item }).as_str()).unwrap()
 }
 
 fn concat_idents(lhs: &str, rhs: &str) -> syn::Ident {
