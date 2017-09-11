@@ -31,6 +31,7 @@ mod export;
 mod database;
 mod generics;
 mod foriegn_functions;
+mod foriegn_functions_mod2;
 
 #[allow(unused_imports)]
 use export::ExportTrait;

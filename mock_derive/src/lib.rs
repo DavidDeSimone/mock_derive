@@ -508,11 +508,27 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: &syn::Item) 
     let mut extern_mocks_ctor_args = quote!{};
     let mut extern_mocks_def = quote!{};
 
+    let abi;
+    let type_name;
+    if let syn::Abi::Named(ref name) = func_block.abi {
+        abi = quote!{ extern #name };
+        type_name = name.replace("extern", "").replace("\"", "");
+    } else {
+        abi = quote!{ extern };
+        type_name = String::from("Rust");
+    }
+    
+    let extern_name = syn::Ident::new(format!("Extern{}Mocks", type_name));
+    let static_name = concat_idents("Static", (quote!{ #extern_name}).as_str());
     for item in func_block.items {
         match item.node {
-            syn::ForeignItemKind::Fn(ref decl, ref _generics) => {
+            syn::ForeignItemKind::Fn(ref decl, ref generics) => {
                 if decl.variadic {
                     panic!("Mocking variadic functions not yet supported. This will be added in the future.");
+                }
+
+                if generics.ty_params.len() > 0 || generics.lifetimes.len() > 0 {
+                    panic!("Mocking extern functions with generics/lifetimes not yet supported.");
                 }
 
                 let (args_with_types, _, _, _) = parse_args(decl.inputs.clone());
@@ -532,13 +548,15 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: &syn::Item) 
                 } else {
                     pubtok = quote!{};
                 }
+                
                 let (return_statement, retval_statement, some_arg) = make_return_tokens(no_return, return_type.clone());
-                let mock_method_body = generate_mock_method_body(pubtok.clone(), quote!{ #name });
+                // Hardcore pub to true here, so that other modules can universally use Extern<>Mocks
+                let mock_method_body = generate_mock_method_body(quote!{ pub }, quote!{ #name });
                 result = quote! {
                     #result
                     #mock_method_body
 
-                    impl ExternMocks {
+                    impl #extern_name {
                         #[allow(dead_code)]
                         pub fn #name_lc() -> #name<#return_type> {
                             #name {
@@ -553,27 +571,26 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: &syn::Item) 
                         }
 
                         #[allow(dead_code)]
-                        fn #setter_name (x: #name<#return_type>) {
-                            let value = StaticExternMocks();
+                        pub fn #setter_name (x: #name<#return_type>) {
+                            let value = #static_name();
                             let mut singleton = value.inner.lock().unwrap();
                             singleton.#name_lc = Some(x);
                         }
 
                         #[allow(dead_code)]
-                        fn #clear_name () {
-                            let value = StaticExternMocks();
+                        pub fn #clear_name () {
+                            let value = #static_name();
                             let mut singleton = value.inner.lock().unwrap();
                             singleton.#name_lc = None;
                         }
                         
                     }
 
-                    // @TODO this needs to be "extern <whatever this mocked block was", not
-                    // hardcoded exern "C"
-                    #[allow(dead_code)]
+                    // We can assume unsafe due to this being an extern block.
                     #[allow(unused_variables)]
-                    #pubtok unsafe extern "C" fn #base_name (#args_with_types) #return_statement {
-                        let value = StaticExternMocks();
+                    #[allow(dead_code)]
+                    #pubtok unsafe #abi fn #base_name (#args_with_types) #return_statement {
+                        let value = #static_name();
                         let singleton = value.inner.lock().unwrap();
                         if let Some(ref method) = singleton.#name_lc {
                             match method.call() {
@@ -596,13 +613,13 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: &syn::Item) 
         }
     }
 
-    let external_static = make_mut_static(quote! { StaticExternMocks }, quote! { ExternMocks }, quote!{
-        ExternMocks { #extern_mocks_ctor_args }
+    let external_static = make_mut_static(quote! { #static_name }, quote! { #extern_name }, quote!{
+        #extern_name { #extern_mocks_ctor_args }
     });
     result = quote!{        
         #[allow(dead_code)]
         #[allow(unused_variables)]
-        struct ExternMocks {
+        pub struct #extern_name {
             #extern_mocks_def
         }
         
