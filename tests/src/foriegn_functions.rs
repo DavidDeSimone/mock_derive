@@ -8,6 +8,13 @@ extern "C" {
     fn no_args_no_ret();
 }
 
+// @TODO having two mocked extern blocks in one mod
+// should work.
+//#[mock]
+//extern "C" {
+//    fn c_echo(x: isize) -> isize;
+//}
+
 
 #[test]
 fn extern_c_test() {

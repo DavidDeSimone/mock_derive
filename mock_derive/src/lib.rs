@@ -569,6 +569,8 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
                         
                     }
 
+                    // @TODO this needs to be "extern <whatever this mocked block was", not
+                    // hardcoded exern "C"
                     #[cfg(test)]
                     #[allow(dead_code)]
                     #[allow(unused_variables)]
