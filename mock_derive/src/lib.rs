@@ -342,7 +342,7 @@ fn parse_return_type(output: syn::FunctionRetTy) -> (bool, quote::Tokens) {
     }
 }
 
-fn parse_trait(trait_block: TraitBlock, raw_trait: syn::Item) -> quote::Tokens {
+fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens {
     let trait_name = trait_block.trait_name;
     let vis = trait_block.vis;
     let generics = trait_block.generics;
@@ -503,7 +503,7 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: syn::Item) -> quote::Tokens {
     stream
 }
 
-fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) -> quote::Tokens {
+fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: &syn::Item) -> quote::Tokens {
     let mut result = quote::Tokens::new();
     let mut extern_mocks_ctor_args = quote!{};
     let mut extern_mocks_def = quote!{};
@@ -538,7 +538,6 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
                     #result
                     #mock_method_body
 
-                    #[cfg(test)]
                     impl ExternMocks {
                         #[allow(dead_code)]
                         pub fn #name_lc() -> #name<#return_type> {
@@ -571,7 +570,6 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
 
                     // @TODO this needs to be "extern <whatever this mocked block was", not
                     // hardcoded exern "C"
-                    #[cfg(test)]
                     #[allow(dead_code)]
                     #[allow(unused_variables)]
                     #pubtok unsafe extern "C" fn #base_name (#args_with_types) #return_statement {
@@ -601,10 +599,7 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, raw_block: syn::Item) ->
     let external_static = make_mut_static(quote! { StaticExternMocks }, quote! { ExternMocks }, quote!{
         ExternMocks { #extern_mocks_ctor_args }
     });
-    result = quote!{
-        #[cfg(not(test))]
-        #raw_block
-        
+    result = quote!{        
         #[allow(dead_code)]
         #[allow(unused_variables)]
         struct ExternMocks {
@@ -634,7 +629,6 @@ fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, init_body: quote::To
             inner: ::std::sync::Arc<::std::sync::Mutex<#ty>>
         }
 
-        #[cfg(test)]
         #[allow(non_snake_case)]
         fn #ident() -> #reader_name {
             thread_local! {
@@ -680,15 +674,33 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
 
     let stream = match parse_block(&raw_item) {
         Mockable::ForeignFunctions(impl_block) => {
-            parse_foreign_functions(impl_block, raw_item)
+            parse_foreign_functions(impl_block, &raw_item)
         },
 
         Mockable::Trait(trait_block) => {
-            parse_trait(trait_block, raw_item)
+            parse_trait(trait_block, &raw_item)
         }
     };
 
-    TokenStream::from_str(stream.as_str()).unwrap()
+    let final_output = quote! {
+        #[cfg(test)]
+        macro_rules! mock_generate {
+            () => {
+                #stream
+            }
+        }
+
+        #[cfg(not(test))]
+        macro_rules! mock_generate {
+            () => {
+                #raw_item
+            }
+        }
+
+        mock_generate!();
+    };
+
+    TokenStream::from_str(final_output.as_str()).unwrap()
 }
 
 fn concat_idents(lhs: &str, rhs: &str) -> syn::Ident {
