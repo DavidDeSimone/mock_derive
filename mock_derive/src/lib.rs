@@ -589,6 +589,8 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: &syn::Item) 
                     // We can assume unsafe due to this being an extern block.
                     #[allow(unused_variables)]
                     #[allow(dead_code)]
+                    #[allow(private_no_mangle_fns)]
+                    #[no_mangle]
                     #pubtok unsafe #abi fn #base_name (#args_with_types) #return_statement {
                         let value = #static_name();
                         let singleton = value.inner.lock().unwrap();
