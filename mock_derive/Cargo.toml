@@ -1,6 +1,6 @@
 [package]
 name = "mock_derive"
-version = "0.6.0"
+version = "0.6.1"
 authors = ["DavidDeSimone <lord.good.mail@gmail.com>"]
 description = "An easy to setup, rich mocking library for the Rust programming language."
 repository = "https://github.com/DavidDeSimone/mock_derive"
