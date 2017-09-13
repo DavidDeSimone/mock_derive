@@ -6,7 +6,7 @@ Mock_Derive is an easy to setup, rich mocking library for the Rust programming l
 In order to install, just add this line to your Cargo.toml
 ```
 [dependencies]
-mock_derive = "0.5.0"
+mock_derive = "0.6.0"
 ```
 
 As a friendly note, mock_derive is not yet a 1.0 crate, and is still under heavy development. As such, you may find several real world use cases that are not yet supported. If you find such a case, please open an issue and we will look at it as soon as possible.
@@ -110,6 +110,50 @@ fn called_once() {
 
     mock.get_int(); // Commenting this line out trigger a failure
     // mock.get_int(); // This would trigger a failure
+}
+
+```
+## EXTERN FUNCTIONS
+
+As of mock_derive 0.6.0, you can now mock static external functions. They share the same API as trait mocks. Check out tests/src/foriegn_functions.rs for more examples.
+
+``` rust
+use mock_derive::mock;
+
+// In #[cfg(test)], this will generate functions named 'c_double', 'c_div', etc that you can control
+// the behavior of. When not in #[cfg(test)], #[mock] is a noop, meaning that no overhead is added,
+// and your program behaves as normal.
+#[mock]
+extern "C" {
+    pub fn c_double(x: isize) -> isize;
+    pub fn c_div(x: isize, y: isize) -> isize;
+    fn side_effect_fn(x: usize, y: usize);
+    fn no_args_no_ret();
+}
+
+#[mock]
+extern "Rust" {
+    fn x_double(x: isize) -> isize;
+}
+
+#[test]
+fn extern_c_test() {
+    let mock = ExternCMocks::method_c_double()
+        .first_call()
+        .set_result(2);
+    
+    ExternCMocks::set_c_double(mock);
+    unsafe { assert!(c_double(1) == 2); }
+}
+
+#[test]
+fn extern_rust_test() {
+    let mock = ExternRustMocks::method_x_double()
+        .first_call()
+        .set_result(2);
+
+    ExternRustMocks::set_x_double(mock);
+    unsafe { assert!(x_double(1) == 2) };
 }
 
 ```
