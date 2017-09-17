@@ -13,8 +13,8 @@ As a friendly note, mock_derive is not yet a 1.0 crate, and is still under heavy
 
 Currently, mock_derive requires you to be running _nightly_ Rust. This will hopefully change in the future, once proc macros are stable.
 
-## How mock_derive is different then previous mocking librarys in other languages.
-In traditional OO languages, mocking in usually based around inheritence, or a mix of method replacement in more dyanmic languages. You make a `Foo` from a mock factory, define the behavior of that `Foo`, and pass it to functions expecting a `Foo`. Rust does not have traditional inheritence, meaning that *only a Foo is a Foo*. Mock_Derive encourages Implementation Mocking. This means that you will derive your mock for a trait. You will pass that mock to methods expecting something that implements that trait, and you will be able to control the behavior of that mock, similar to other mocking libs you may have worked with in the past.
+## How mock_derive is different to previous mocking libraries in other languages.
+In traditional OO languages, mocking is usually based around inheritance, or a mix of method replacement in more dynamic languages. You make a `Foo` from a mock factory, define the behavior of that `Foo`, and pass it to functions expecting a `Foo`. Rust does not have traditional inheritance, meaning that *only a Foo is a Foo*. Mock_Derive encourages Implementation Mocking. This means that you will derive your mock for a trait. You will pass that mock to methods expecting something that implements that trait, and you will be able to control the behavior of that mock, similar to other mocking libs you may have worked with in the past.
 
 ## Examples
 Using this crate looks something like this: 
@@ -34,7 +34,7 @@ pub trait CustomTrait {
 }
 
 ```
-You'll notice that we have included a #[mock] derective above our trait definition. By default, this will generate an implementation of CustomTrait named "MockCustomTrait", that has helper functions used to control it's behavior. For example, we can write the following test functions:
+You'll notice that we have included a #[mock] directive above our trait definition. By default, this will generate an implementation of CustomTrait named "MockCustomTrait", that has helper functions used to control its behavior. For example, we can write the following test functions:
  
 ``` rust
 #[test]
@@ -108,7 +108,7 @@ fn called_once() {
         .return_result_of(|| 10);
     mock.set_foo(method);
 
-    mock.get_int(); // Commenting this line out trigger a failure
+    mock.get_int(); // Commenting this line out would trigger a failure
     // mock.get_int(); // This would trigger a failure
 }
 
@@ -208,6 +208,4 @@ There are some tests which double as examples in the tests/ directory. cd into t
 Anyone is welcome to contribute! If you have an addition/bug fix that you would like to contribute, just open a PR and it will be looked at. Work in Progress (WIP) PRs are also welcome. Just include [WIP] in the name of the PR.
 
 ## LISCENCE
-Mock_Derive is liscened under MIT. 
-
-
+Mock_Derive is licensed under MIT. 
