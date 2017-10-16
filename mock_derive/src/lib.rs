@@ -366,7 +366,6 @@ fn generate_mock_method_name(trait_block: &TraitBlock) -> (quote::Tokens, quote:
 
 fn generate_trait_fns(trait_block: &TraitBlock)
                       -> (quote::Tokens, quote::Tokens, quote::Tokens, quote::Tokens) {
-    let generics = trait_block.generics.clone();
     let trait_functions = trait_block.funcs.clone();
 
     let mut mock_impl_methods = quote::Tokens::new();
@@ -497,11 +496,11 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
     }
 
     let (impl_name, mock_method_name) = generate_mock_method_name(&trait_block);
-    let (mut mock_impl_methods, mut fields, mut ctor, mut method_impls) = generate_trait_fns(&trait_block);
+    let (mut mock_impl_methods, mut fields, mut ctor, method_impls) = generate_trait_fns(&trait_block);
     
     let mock_method_body = generate_mock_method_body(quote!{ #pubtok }, quote!{ #mock_method_name });
     let ref ty_param_bound = trait_block.ty_bounds;
-    let mut inherited_impl = quote!{};
+
     {
         let bounds = BOUNDS_MAP.lock().unwrap();
         for item in ty_param_bound.iter() {
@@ -516,7 +515,6 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
                 if let Some(impl_body) = bounds.get(&path_str) {
                     let ref base_generics = impl_body.generics;
                     let ref base_trait_name = impl_body.trait_name;
-                    let ref base_where_clause = impl_body.where_clause;
                     let (base_mock_impl_methods,
                          base_fields,
                          base_ctor,
