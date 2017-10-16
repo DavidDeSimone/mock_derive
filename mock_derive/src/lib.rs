@@ -533,9 +533,6 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
                             #base_method_impls
                         }
                     };
-                } else {
-                    // @TODO decide what we want to do here.
-                    panic!("WHAM");
                 }
             }
         }

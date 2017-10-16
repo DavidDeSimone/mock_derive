@@ -39,6 +39,17 @@ trait Compisition : Base + Derived {
     fn x(&self) -> isize;
 }
 
+// @TODO support
+/*
+trait BaseG<T> {
+...
+};
+
+trait DerivedG : BaseG<usize> {
+...
+};
+*/
+
 #[test]
 fn mock_derived() {
     let mut mock_derived = MockDerived::new();
