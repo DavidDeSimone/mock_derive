@@ -29,27 +29,40 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 extern crate proc_macro;
+#[macro_use]
+extern crate lazy_static;
 
 use proc_macro::TokenStream;
 use std::str::FromStr;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
+#[derive(Clone)]
 struct Function {
     pub name: syn::Ident,
     pub decl: syn::FnDecl,
     pub safety: syn::Unsafety
 }
 
+#[derive(Clone)]
 struct TraitBlock {
     trait_name: quote::Tokens,
     vis: syn::Visibility,
     generics: quote::Tokens,
     where_clause: quote::Tokens,
     funcs: Vec<Function>,
+    ty_bounds: Vec<syn::TyParamBound>,
 }
 
 enum Mockable {
     ForeignFunctions(syn::ForeignMod),
     Trait(TraitBlock),
+}
+
+lazy_static! {
+    static ref BOUNDS_MAP: Mutex<HashMap<String, TraitBlock>> = {
+        Mutex::new(HashMap::new())
+    };
 }
 
 fn parse_block(item: &syn::Item) -> Mockable {
@@ -60,7 +73,7 @@ fn parse_block(item: &syn::Item) -> Mockable {
     let mut generic_tokens = quote! { };
     let where_clause;
     match item.node {
-        syn::ItemKind::Trait(_unsafety, ref generics, ref _ty_param_bound, ref items) => {
+        syn::ItemKind::Trait(_unsafety, ref generics, ref ty_param_bound, ref items) => {
             let gens = generics.clone();
             for life_ty in gens.lifetimes {
                 generic_tokens = quote! { #generic_tokens #life_ty, };
@@ -72,7 +85,7 @@ fn parse_block(item: &syn::Item) -> Mockable {
 
             let where_clone = gens.where_clause.clone();
             where_clause = quote! { #where_clone };
-            
+
             for item in items {
                 match item.node {
                     syn::TraitItemKind::Method(ref sig, ref _block) => {
@@ -86,7 +99,8 @@ fn parse_block(item: &syn::Item) -> Mockable {
                                          vis: vis,
                                          generics: quote! { <#generic_tokens> },
                                          where_clause: where_clause,
-                                         funcs: result
+                                         funcs: result,
+                                         ty_bounds: ty_param_bound.clone(),
             })
         },
         syn::ItemKind::ForeignMod(ref fmod) => {
@@ -96,6 +110,7 @@ fn parse_block(item: &syn::Item) -> Mockable {
     }
 }
 
+// @TODO this can't handle taking self with owership, due to size constaints. This should be fixable.
 fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Mutability, bool) {
     let mut argc = 0;
     let mut args_with_types = quote::Tokens::new();
@@ -342,25 +357,23 @@ fn parse_return_type(output: syn::FunctionRetTy) -> (bool, quote::Tokens) {
     }
 }
 
-fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens {
-    let trait_name = trait_block.trait_name;
-    let vis = trait_block.vis;
-    let generics = trait_block.generics;
-    let where_clause = trait_block.where_clause;
-    let trait_functions = trait_block.funcs;
-    
+fn generate_mock_method_name(trait_block: &TraitBlock) -> (quote::Tokens, quote::Tokens) {
+    let ref trait_name = trait_block.trait_name;
+    let struct_name = concat_idents("Mock", trait_name.as_str());
+    let mock_method_name = concat_idents("MockMethodFor", trait_name.as_str());
+    (quote! { #struct_name }, quote! { #mock_method_name })
+}
+
+fn generate_trait_fns(trait_block: &TraitBlock)
+                      -> (quote::Tokens, quote::Tokens, quote::Tokens, quote::Tokens) {
+    let trait_functions = trait_block.funcs.clone();
+
     let mut mock_impl_methods = quote::Tokens::new();
     let mut fields = quote::Tokens::new();
     let mut ctor = quote::Tokens::new();
     let mut method_impls = quote::Tokens::new();
-    let mut pubtok = quote::Tokens::new();
-    
-    let impl_name = concat_idents("Mock", trait_name.as_str());
-    let mock_method_name = concat_idents("MockMethodFor", trait_name.as_str());
 
-    if vis == syn::Visibility::Public {
-        pubtok = quote! { pub };
-    }
+    let (_, mock_method_name) = generate_mock_method_name(trait_block);
     
     // For each method in the Impl block, we create a "method_" name function that returns an
     // object to mutate
@@ -464,9 +477,65 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
                 }
             }
         };
-    }    
+    }
 
+    (mock_impl_methods, fields, ctor, method_impls)
+}
+
+fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens {
+    let trait_name = trait_block.trait_name.clone();
+    let vis = trait_block.vis.clone();
+    let generics = trait_block.generics.clone();
+    let where_clause = trait_block.where_clause.clone();
+    
+    let mut pubtok = quote::Tokens::new();
+    let mut derived_additions = quote::Tokens::new();
+    
+    if vis == syn::Visibility::Public {
+        pubtok = quote! { pub };
+    }
+
+    let (impl_name, mock_method_name) = generate_mock_method_name(&trait_block);
+    let (mut mock_impl_methods, mut fields, mut ctor, method_impls) = generate_trait_fns(&trait_block);
+    
     let mock_method_body = generate_mock_method_body(quote!{ #pubtok }, quote!{ #mock_method_name });
+    let ref ty_param_bound = trait_block.ty_bounds;
+
+    {
+        let bounds = BOUNDS_MAP.lock().unwrap();
+        for item in ty_param_bound.iter() {
+            // @TODO we cannot ignore bound_modifier if we want to support ?Sized
+            if let &syn::TyParamBound::Trait(ref poly_ref, _bound_modifier) = item {
+                let path = poly_ref.trait_ref.clone();
+                let path_len = path.segments.len();
+                let ref final_path_segment = path.segments[path_len - 1];
+                let ref ident = final_path_segment.ident;
+                let qt = quote!{#ident};
+                let path_str = String::from_str(qt.as_str()).unwrap();
+                if let Some(impl_body) = bounds.get(&path_str) {
+                    let ref base_generics = impl_body.generics;
+                    let ref base_trait_name = impl_body.trait_name;
+                    let (base_mock_impl_methods,
+                         base_fields,
+                         base_ctor,
+                         base_method_impls) = generate_trait_fns(&impl_body);
+
+                    mock_impl_methods = quote! { #mock_impl_methods #base_mock_impl_methods };
+                    fields = quote! { #fields #base_fields };
+                    ctor = quote! { #ctor #base_ctor };
+
+                    derived_additions = quote! {
+                        #derived_additions
+                        
+                        impl #base_generics #base_trait_name #base_generics for #impl_name #generics #where_clause {
+                            #base_method_impls
+                        }
+                    };
+                }
+            }
+        }
+    }
+    
     let stream = quote! {
         #raw_trait
 
@@ -497,8 +566,14 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
         impl #generics #trait_name #generics for #impl_name #generics #where_clause {
             #method_impls
         }
-        
+
+
+        #derived_additions
     };
+
+    let mut map = BOUNDS_MAP.lock().unwrap();
+    let name_string = String::from_str(trait_name.as_str()).unwrap();
+    map.insert(name_string, trait_block.clone());
 
     stream
 }
