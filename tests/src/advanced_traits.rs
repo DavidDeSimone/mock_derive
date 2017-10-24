@@ -39,6 +39,11 @@ trait Compisition : Base + Derived {
     fn x(&self) -> isize;
 }
 
+#[mock]
+trait SelfOwnership {
+    fn as_owned(self) -> usize;
+}
+
 // @TODO support
 /*
 trait BaseG<T> {
@@ -66,4 +71,41 @@ fn mock_derived() {
 
     mock_derived.set_add(method_base);
     assert!(mock_derived.add(0, 0) == 25);
+}
+
+#[test]
+fn mock_self_owned() {
+    let mut mock = MockSelfOwnership::new();
+    let method = mock.method_as_owned()
+        .called_once()
+        .first_call()
+        .set_result(25);
+
+    mock.set_as_owned(method);
+
+    assert!(mock.as_owned() == 25);
+}
+
+#[cfg(test)]
+struct Foo;
+
+#[cfg(test)]
+impl SelfOwnership for Foo {
+    fn as_owned(self) -> usize {
+        35
+    }
+}
+
+#[test]
+#[should_panic]
+fn mock_self_owned_no_fallback() {
+    let mut mock = MockSelfOwnership::new();
+    let foo = Foo { };
+    let method = mock.method_as_owned()
+        .called_once();
+    
+    mock.set_fallback(foo);
+    mock.set_as_owned(method);
+
+    assert!(mock.as_owned() == 35);
 }
