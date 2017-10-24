@@ -110,13 +110,13 @@ fn parse_block(item: &syn::Item) -> Mockable {
     }
 }
 
-// @TODO this can't handle taking self with owership, due to size constaints. This should be fixable.
-fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Mutability, bool) {
+fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Mutability, bool, bool) {
     let mut argc = 0;
     let mut args_with_types = quote::Tokens::new();
     let mut args_with_no_self_no_types = quote::Tokens::new();
     let arg_name = quote!{a};
     let mut is_instance_method = false;
+    let mut takes_self_ownership = false;
     let mut mutable_status = syn::Mutability::Immutable;
     for input in decl {
         match input {
@@ -148,6 +148,7 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Muta
                 }
 
                 is_instance_method = true;
+                takes_self_ownership = true;
                 argc += 1;
             },
             syn::FnArg::Captured(_pat, ty) => {                
@@ -182,7 +183,7 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Muta
         }
     }
 
-    (args_with_types, args_with_no_self_no_types, mutable_status, is_instance_method)
+    (args_with_types, args_with_no_self_no_types, mutable_status, is_instance_method, takes_self_ownership)
 }
 
 fn make_return_tokens(no_return: bool, return_type: quote::Tokens) -> (quote::Tokens, quote::Tokens, quote::Tokens) {
@@ -382,7 +383,12 @@ fn generate_trait_fns(trait_block: &TraitBlock)
         let name_stream = quote! { #name };
         let ident = concat_idents("method_", name_stream.as_str());
         let setter = concat_idents("set_", name_stream.as_str());
-        let (args_with_types, args_with_no_self_no_types, mutability, is_instance_method) = parse_args(function.decl.inputs);
+        let (args_with_types,
+             args_with_no_self_no_types,
+             mutability,
+             is_instance_method,
+             takes_self_ownership) = parse_args(function.decl.inputs);
+        
         let (no_return, return_type) = parse_return_type(function.decl.output);
 
         if !is_instance_method {
@@ -444,12 +450,19 @@ fn generate_trait_fns(trait_block: &TraitBlock)
             get_ref = quote! { .as_ref() };
         }
 
-        let fallback = quote! {
-            let ref #mut_token fallback = self.fallback
-                #get_ref
+        let fallback;
+        if takes_self_ownership {
+            fallback = quote! {
+                panic!("Using a fallback for methods that take ownership of self is not supported. This is because the internals of our library do not know the size of your implementation at compile time, and will not be able to call the fallback method");
+            };
+        } else {
+            fallback = quote! {
+                let ref #mut_token fallback = self.fallback
+                    #get_ref
                 .expect("Called method without either a fallback, or a set result");
-            fallback.#name_stream(#args_with_no_self_no_types)
-        };
+                fallback.#name_stream(#args_with_no_self_no_types)
+            };
+        }
 
         let (return_statement, retval_statement, some_arg) = make_return_tokens(no_return, return_type.clone());
 
@@ -606,7 +619,7 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: &syn::Item) 
                     panic!("Mocking extern functions with generics/lifetimes not yet supported.");
                 }
 
-                let (args_with_types, _, _, _) = parse_args(decl.inputs.clone());
+                let (args_with_types, _, _, _, _) = parse_args(decl.inputs.clone());
                 let (no_return, return_type) = parse_return_type(decl.clone().output);
                 
                 let ref item_ident = item.ident;
@@ -693,7 +706,7 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: &syn::Item) 
     let external_static = make_mut_static(quote! { #static_name }, quote! { #extern_name }, quote!{
         #extern_name { #extern_mocks_ctor_args }
     });
-    result = quote!{        
+    result = quote!{
         #[allow(dead_code)]
         #[allow(unused_variables)]
         pub struct #extern_name {
@@ -784,12 +797,12 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
             }
         }
 
-        #[cfg(not(test))]
-        macro_rules! mock_generate {
-            () => {
-                #raw_item
-            }
-        }
+       #[cfg(not(test))]
+       macro_rules! mock_generate {
+           () => {
+               #raw_item
+           }
+       }
 
         mock_generate!();
     };
