@@ -122,67 +122,34 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Muta
     let mut mutable_status = syn::Mutability::Immutable;
     for input in decl {
         match input {
-            syn::FnArg::SelfRef(_lifetime, mutability) => {
-                if mutability == syn::Mutability::Mutable {
-                    args_with_types = quote! {
-                        &mut self
-                    };
-                    mutable_status = mutability.clone();
-                } else {
-                    args_with_types = quote! {
-                        &self
-                    };
-                }
-
+            syn::FnArg::SelfRef(lifetime, mutability) => {
+                args_with_types = quote! { &#lifetime #mutability self };
+                mutable_status = mutability;
                 is_instance_method = true;
-                argc += 1;
             },
             syn::FnArg::SelfValue(mutability) => {
-                if mutability == syn::Mutability::Mutable {
-                    args_with_types = quote! {
-                        mut self
-                    };
-                    mutable_status = mutability.clone();
-                } else {
-                    args_with_types = quote! {
-                        self
-                    };
-                }
-
+                args_with_types = quote!{#mutability self };
+                mutable_status = mutability;
                 is_instance_method = true;
                 takes_self_ownership = true;
-                argc += 1;
             },
             syn::FnArg::Captured(_pat, ty) => {                
                 let tok = concat_idents(arg_name.as_str(), format!("{}", argc).as_str());
-                if argc == 0 {
-                    args_with_types = quote! {
-                        #tok: #ty
-                    };
-                    
-                    args_with_no_self_no_types = quote! {
-                        #tok
-                    };
-                } else if argc == 1 {
-                    args_with_types = quote! {
-                        #args_with_types, #tok : #ty 
-                    };
-                    args_with_no_self_no_types = quote! {
-                        #tok
-                    }
-                } else {
-                    args_with_types = quote! {
-                        #args_with_types, #tok : #ty 
-                    };
-                    args_with_no_self_no_types = quote! {
-                        #args_with_no_self_no_types, #tok
-                    };
+                if argc > 0 {
+                    args_with_types.append(quote! {,});
                 }
 
-                argc += 1;
+                if argc > 1 {
+                    args_with_no_self_no_types.append(quote!{,});
+                }
+
+                args_with_types.append(quote! { #tok: #ty });
+                args_with_no_self_no_types.append(quote! { #tok });
             },
             _ => {}
         }
+
+        argc += 1;
     }
 
     (args_with_types, args_with_no_self_no_types, mutable_status, is_instance_method, takes_self_ownership)
