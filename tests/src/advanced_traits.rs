@@ -44,6 +44,11 @@ trait SelfOwnership {
     fn as_owned(self) -> usize;
 }
 
+#[mock]
+unsafe trait UnsafeTrait {
+    unsafe fn this_is_not_safe(&mut self);
+}
+
 // @TODO support
 /*
 trait BaseG<T> {
@@ -108,4 +113,15 @@ fn mock_self_owned_no_fallback() {
     mock.set_as_owned(method);
 
     assert!(mock.as_owned() == 35);
+}
+
+#[test]
+fn unsafety_trait() {
+    let mut mock = MockUnsafeTrait::new();
+    let method = mock.method_this_is_not_safe()
+        .called_once()
+        .set_result(());
+
+    mock.set_this_is_not_safe(method);
+    unsafe { mock.this_is_not_safe() };
 }

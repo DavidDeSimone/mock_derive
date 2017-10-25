@@ -52,6 +52,7 @@ struct TraitBlock {
     where_clause: quote::Tokens,
     funcs: Vec<Function>,
     ty_bounds: Vec<syn::TyParamBound>,
+    unsafety: syn::Unsafety,
 }
 
 enum Mockable {
@@ -71,7 +72,7 @@ fn parse_block(item: &syn::Item) -> Mockable {
     let trait_name = quote! { #ident_name };
     let mut generic_tokens = quote! { };
     match item.node {
-        syn::ItemKind::Trait(_unsafety, ref generics, ref ty_param_bound, ref items) => {
+        syn::ItemKind::Trait(unsafety, ref generics, ref ty_param_bound, ref items) => {
             for life_ty in &generics.lifetimes {
                 generic_tokens.append(quote! {  #life_ty, });
             }
@@ -103,6 +104,7 @@ fn parse_block(item: &syn::Item) -> Mockable {
                                          where_clause: where_clause,
                                          funcs: result,
                                          ty_bounds: ty_param_bound.clone(),
+                                         unsafety: unsafety.clone(),
             })
         },
         syn::ItemKind::ForeignMod(ref fmod) => {
@@ -475,6 +477,7 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
     let ref vis = trait_block.vis;
     let ref generics = trait_block.generics;
     let ref where_clause = trait_block.where_clause;
+    let ref unsafety = trait_block.unsafety;
     
     let pubtok = quote!{ #vis };
     let mut derived_additions = quote::Tokens::new();
@@ -547,7 +550,7 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
 
         #mock_method_body
 
-        impl #generics #trait_name #generics for #impl_name #generics #where_clause {
+        #unsafety impl #generics #trait_name #generics for #impl_name #generics #where_clause {
             #method_impls
         }
 
