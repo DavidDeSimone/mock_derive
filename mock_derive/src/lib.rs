@@ -407,12 +407,11 @@ fn generate_trait_fns(trait_block: &TraitBlock)
         }
 
         // This is getting a litte confusing with all of the tokens here.
-        // This is defining the methods for #ident, which is generated per method of the impl trait.
+        // This is defining the methods for #ident,
+        // which is generated per method of the impl trait.
         // we generate a getter called method_foo, and a setter called set_foo.
         // These methods will be put on the MockImpl struct.
-        mock_impl_methods = quote! {
-            #mock_impl_methods
-            
+        mock_impl_methods.append(quote! {
             pub fn #ident(&self) -> #mock_method_name<#return_type> {
                 #mock_method_name {
                     call_num: ::std::sync::Mutex::new(1),
@@ -428,18 +427,15 @@ fn generate_trait_fns(trait_block: &TraitBlock)
             pub fn #setter(&mut self, method: #mock_method_name<#return_type>) {
                 self.#name_stream = Some(method);
             }
-        };
+        });;
 
         // The fields on the MockImpl struct.
-        fields = quote! {
-            #fields
-            #name_stream : Option<#mock_method_name<#return_type>> , 
-        };
+        fields.append(quote! { #name_stream
+                                : Option<#mock_method_name<#return_type>> , });
 
-        // The values that we will set in the ctor for the above defined 'fields' of MockImpl
-        ctor = quote! {
-            #ctor #name_stream : None, 
-        };
+        // The values that we will set in the ctor for the above defined
+        // 'fields' of MockImpl
+        ctor.append(quote! { #name_stream : None, });
 
         let get_ref;
         let mut mut_token = quote::Tokens::new();
@@ -466,8 +462,7 @@ fn generate_trait_fns(trait_block: &TraitBlock)
 
         let (return_statement, retval_statement, some_arg) = make_return_tokens(no_return, return_type.clone());
 
-        method_impls = quote! {
-            #method_impls
+        method_impls.append(quote! {
             #unsafety fn #name_stream(#args_with_types) #return_statement {
                 match self.#name_stream.as_ref() {
                     Some(method) => {
@@ -489,7 +484,7 @@ fn generate_trait_fns(trait_block: &TraitBlock)
                     }
                 }
             }
-        };
+        });
     }
 
     (mock_impl_methods, fields, ctor, method_impls)
@@ -519,10 +514,7 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
         for item in ty_param_bound.iter() {
             // @TODO we cannot ignore bound_modifier if we want to support ?Sized
             if let &syn::TyParamBound::Trait(ref poly_ref, _bound_modifier) = item {
-                let path = poly_ref.trait_ref.clone();
-                let path_len = path.segments.len();
-                let ref final_path_segment = path.segments[path_len - 1];
-                let ref ident = final_path_segment.ident;
+                let ref ident = poly_ref.trait_ref.segments.last().unwrap().ident;
                 let qt = quote!{#ident};
                 let path_str = String::from_str(qt.as_str()).unwrap();
                 if let Some(impl_body) = bounds.get(&path_str) {
@@ -533,17 +525,15 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
                          base_ctor,
                          base_method_impls) = generate_trait_fns(&impl_body);
 
-                    mock_impl_methods = quote! { #mock_impl_methods #base_mock_impl_methods };
-                    fields = quote! { #fields #base_fields };
-                    ctor = quote! { #ctor #base_ctor };
-
-                    derived_additions = quote! {
-                        #derived_additions
-                        
-                        impl #base_generics #base_trait_name #base_generics for #impl_name #generics #where_clause {
+                    mock_impl_methods.append(quote! { #base_mock_impl_methods });
+                    fields.append(quote! { #base_fields });
+                    ctor.append(quote! { #base_ctor });
+                    derived_additions.append(quote! {
+                        impl #base_generics #base_trait_name #base_generics
+                            for #impl_name #generics #where_clause {
                             #base_method_impls
                         }
-                    };
+                    });
                 }
             }
         }
