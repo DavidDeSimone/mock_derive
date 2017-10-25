@@ -69,34 +69,36 @@ fn parse_block(item: &syn::Item) -> Mockable {
     let mut result = Vec::new();
     let ident_name = item.ident.clone();
     let trait_name = quote! { #ident_name };
-    let vis = item.vis.clone();
     let mut generic_tokens = quote! { };
-    let where_clause;
     match item.node {
         syn::ItemKind::Trait(_unsafety, ref generics, ref ty_param_bound, ref items) => {
-            let gens = generics.clone();
-            for life_ty in gens.lifetimes {
-                generic_tokens = quote! { #generic_tokens #life_ty, };
+            for life_ty in &generics.lifetimes {
+                generic_tokens.append(quote! {  #life_ty, });
             }
 
-            for generic in gens.ty_params {
-                generic_tokens = quote! { #generic_tokens #generic, };
+            for generic in &generics.ty_params {
+                generic_tokens.append(quote! { #generic, });
             }
 
-            let where_clone = gens.where_clause.clone();
-            where_clause = quote! { #where_clone };
+            let ref where_tok = generics.where_clause;
+            let where_clause = quote! { #where_tok };
 
             for item in items {
                 match item.node {
                     syn::TraitItemKind::Method(ref sig, ref _block) => {
-                        result.push(Function {name: item.ident.clone(), decl: sig.decl.clone(), safety: sig.unsafety.clone() } );
+                        let func = Function {
+                            name: item.ident.clone(),
+                            decl: sig.decl.clone(),
+                            safety: sig.unsafety.clone()
+                        };
+                        result.push(func);
                     },
                     _ => { }
                 }
             }
 
             Mockable::Trait(TraitBlock { trait_name: trait_name,
-                                         vis: vis,
+                                         vis: item.vis.clone(),
                                          generics: quote! { <#generic_tokens> },
                                          where_clause: where_clause,
                                          funcs: result,
