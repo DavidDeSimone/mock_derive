@@ -12,6 +12,7 @@ env:
 
 script:
   - cargo test --manifest-path=tests/Cargo.toml
+  - cargo test --release --manifest-path=tests/Cargo.toml
 
 notifications:
   fast_finish: true
