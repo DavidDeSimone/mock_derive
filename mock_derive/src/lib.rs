@@ -112,39 +112,35 @@ fn parse_block(item: &syn::Item) -> Mockable {
     }
 }
 
-fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Mutability, bool, bool) {
+fn parse_args(decl: Vec<syn::FnArg>) -> FnArgs {
     let mut argc = 0;
-    let mut args_with_types = quote::Tokens::new();
-    let mut args_with_no_self_no_types = quote::Tokens::new();
+    let mut args = FnArgs::new();
     let arg_name = quote!{a};
-    let mut is_instance_method = false;
-    let mut takes_self_ownership = false;
-    let mut mutable_status = syn::Mutability::Immutable;
     for input in decl {
         match input {
             syn::FnArg::SelfRef(lifetime, mutability) => {
-                args_with_types = quote! { &#lifetime #mutability self };
-                mutable_status = mutability;
-                is_instance_method = true;
+                args.args_with_types = quote! { &#lifetime #mutability self };
+                args.mutable_status = mutability;
+                args.is_instance_method = true;
             },
             syn::FnArg::SelfValue(mutability) => {
-                args_with_types = quote!{#mutability self };
-                mutable_status = mutability;
-                is_instance_method = true;
-                takes_self_ownership = true;
+                args.args_with_types = quote!{#mutability self };
+                args.mutable_status = mutability;
+                args.is_instance_method = true;
+                args.takes_self_ownership = true;
             },
             syn::FnArg::Captured(_pat, ty) => {                
                 let tok = concat_idents(arg_name.as_str(), format!("{}", argc).as_str());
                 if argc > 0 {
-                    args_with_types.append(quote! {,});
+                    args.args_with_types.append(quote! {,});
                 }
 
                 if argc > 1 {
-                    args_with_no_self_no_types.append(quote!{,});
+                    args.args_with_no_self_no_types.append(quote!{,});
                 }
 
-                args_with_types.append(quote! { #tok: #ty });
-                args_with_no_self_no_types.append(quote! { #tok });
+                args.args_with_types.append(quote! { #tok: #ty });
+                args.args_with_no_self_no_types.append(quote! { #tok });
             },
             _ => {}
         }
@@ -152,7 +148,27 @@ fn parse_args(decl: Vec<syn::FnArg>) -> (quote::Tokens, quote::Tokens, syn::Muta
         argc += 1;
     }
 
-    (args_with_types, args_with_no_self_no_types, mutable_status, is_instance_method, takes_self_ownership)
+    args
+}
+
+struct FnArgs {
+    args_with_types: quote::Tokens,
+    args_with_no_self_no_types: quote::Tokens,
+    mutable_status: syn::Mutability,
+    is_instance_method: bool,
+    takes_self_ownership: bool,
+}
+
+impl FnArgs {
+    fn new() -> FnArgs {
+        FnArgs {
+            args_with_types: quote! { },
+            args_with_no_self_no_types: quote! { },
+            mutable_status: syn::Mutability::Immutable,
+            is_instance_method: false,
+            takes_self_ownership: false,
+        }
+    }
 }
 
 fn make_return_tokens(no_return: bool, return_type: quote::Tokens) -> (quote::Tokens, quote::Tokens, quote::Tokens) {
@@ -352,15 +368,12 @@ fn generate_trait_fns(trait_block: &TraitBlock)
         let name_stream = quote! { #name };
         let ident = concat_idents("method_", name_stream.as_str());
         let setter = concat_idents("set_", name_stream.as_str());
-        let (args_with_types,
-             args_with_no_self_no_types,
-             mutability,
-             is_instance_method,
-             takes_self_ownership) = parse_args(function.decl.inputs);
-        
+        let fn_args = parse_args(function.decl.inputs);
+        let ref args_with_no_self_no_types = fn_args.args_with_no_self_no_types;
+        let ref args_with_types = fn_args.args_with_types;
         let (no_return, return_type) = parse_return_type(function.decl.output);
 
-        if !is_instance_method {
+        if !fn_args.is_instance_method {
             panic!("Mocking a trait with static methods is not yet supported. This is planned to be supported in the future");
         }
 
@@ -408,7 +421,7 @@ fn generate_trait_fns(trait_block: &TraitBlock)
 
         let get_ref;
         let mut mut_token = quote::Tokens::new();
-        if mutability == syn::Mutability::Mutable {
+        if fn_args.mutable_status == syn::Mutability::Mutable {
             get_ref = quote! { .as_mut() };
             mut_token = quote!{ mut };
         } else {
@@ -416,7 +429,7 @@ fn generate_trait_fns(trait_block: &TraitBlock)
         }
 
         let fallback;
-        if takes_self_ownership {
+        if fn_args.takes_self_ownership {
             fallback = quote! {
                 panic!("Using a fallback for methods that take ownership of self is not supported. This is because the internals of our library do not know the size of your implementation at compile time, and will not be able to call the fallback method");
             };
@@ -578,7 +591,8 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: &syn::Item) 
                     panic!("Mocking extern functions with generics/lifetimes not yet supported.");
                 }
 
-                let (args_with_types, _, _, _, _) = parse_args(decl.inputs.clone());
+                let fn_args  = parse_args(decl.inputs.clone());
+                let ref args_with_types = fn_args.args_with_types;
                 let (no_return, return_type) = parse_return_type(decl.clone().output);
                 
                 let ref item_ident = item.ident;
