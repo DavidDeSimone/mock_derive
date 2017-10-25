@@ -171,7 +171,7 @@ impl FnArgs {
     }
 }
 
-fn make_return_tokens(no_return: bool, return_type: quote::Tokens) -> (quote::Tokens, quote::Tokens, quote::Tokens) {
+fn make_return_tokens(no_return: bool, return_type: &quote::Tokens) -> (quote::Tokens, quote::Tokens, quote::Tokens) {
     if no_return {
         (quote::Tokens::new(), quote::Tokens::new(), quote! { _ })
     } else {
@@ -179,7 +179,7 @@ fn make_return_tokens(no_return: bool, return_type: quote::Tokens) -> (quote::To
     }
 }
 
-fn generate_mock_method_body(pubtok: quote::Tokens, mock_method_name: quote::Tokens) -> quote::Tokens {
+fn generate_mock_method_body(pubtok: &quote::Tokens, mock_method_name: &quote::Tokens) -> quote::Tokens {
     quote!{ 
         #[allow(dead_code)]
         #[allow(non_camel_case_types)]
@@ -332,12 +332,12 @@ fn generate_mock_method_body(pubtok: quote::Tokens, mock_method_name: quote::Tok
     }
 }
 
-fn parse_return_type(output: syn::FunctionRetTy) -> (bool, quote::Tokens) {
+fn parse_return_type(output: &syn::FunctionRetTy) -> (bool, quote::Tokens) {
     match output {
-        syn::FunctionRetTy::Default => {
+        &syn::FunctionRetTy::Default => {
             (true, quote! { () })
         },
-        syn::FunctionRetTy::Ty(ref ty) => {
+        &syn::FunctionRetTy::Ty(ref ty) => {
             (false, quote! { #ty })
         },
     }
@@ -371,7 +371,7 @@ fn generate_trait_fns(trait_block: &TraitBlock)
         let fn_args = parse_args(function.decl.inputs);
         let ref args_with_no_self_no_types = fn_args.args_with_no_self_no_types;
         let ref args_with_types = fn_args.args_with_types;
-        let (no_return, return_type) = parse_return_type(function.decl.output);
+        let (no_return, return_type) = parse_return_type(&function.decl.output);
 
         if !fn_args.is_instance_method {
             panic!("Mocking a trait with static methods is not yet supported. This is planned to be supported in the future");
@@ -381,12 +381,8 @@ fn generate_trait_fns(trait_block: &TraitBlock)
             panic!("Impls with the 'Self' return type are not supported. This is due to the fact that we generate an impl of your trait for a Mock struct. Methods that return Self will return an instance on our mock struct, not YOUR struct, which is not what you want.");
         }
 
-        let unsafety;
-        if function.safety == syn::Unsafety::Unsafe {
-            unsafety = quote! { unsafe };
-        } else {
-            unsafety = quote! { };
-        }
+        let ref is_unsafe = function.safety;
+        let unsafety = quote!{ #is_unsafe };
 
         // This is getting a litte confusing with all of the tokens here.
         // This is defining the methods for #ident,
@@ -419,13 +415,13 @@ fn generate_trait_fns(trait_block: &TraitBlock)
         // 'fields' of MockImpl
         ctor.append(quote! { #name_stream : None, });
 
+        let ref mutable_status = fn_args.mutable_status;
+        let mut_token = quote! { #mutable_status };
         let get_ref;
-        let mut mut_token = quote::Tokens::new();
-        if fn_args.mutable_status == syn::Mutability::Mutable {
-            get_ref = quote! { .as_mut() };
-            mut_token = quote!{ mut };
+        if *mutable_status == syn::Mutability::Mutable {
+            get_ref = quote! { .as_mut() }
         } else {
-            get_ref = quote! { .as_ref() };
+            get_ref = quote! { .as_ref() }
         }
 
         let fallback;
@@ -442,7 +438,9 @@ fn generate_trait_fns(trait_block: &TraitBlock)
             };
         }
 
-        let (return_statement, retval_statement, some_arg) = make_return_tokens(no_return, return_type.clone());
+        let (return_statement,
+             retval_statement,
+             some_arg) = make_return_tokens(no_return, &return_type);
 
         method_impls.append(quote! {
             #unsafety fn #name_stream(#args_with_types) #return_statement {
@@ -473,22 +471,23 @@ fn generate_trait_fns(trait_block: &TraitBlock)
 }
 
 fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens {
-    let trait_name = trait_block.trait_name.clone();
-    let vis = trait_block.vis.clone();
-    let generics = trait_block.generics.clone();
-    let where_clause = trait_block.where_clause.clone();
+    let ref trait_name = trait_block.trait_name;
+    let ref vis = trait_block.vis;
+    let ref generics = trait_block.generics;
+    let ref where_clause = trait_block.where_clause;
     
-    let mut pubtok = quote::Tokens::new();
+    let pubtok = quote!{ #vis };
     let mut derived_additions = quote::Tokens::new();
     
-    if vis == syn::Visibility::Public {
-        pubtok = quote! { pub };
-    }
-
-    let (impl_name, mock_method_name) = generate_mock_method_name(&trait_block);
-    let (mut mock_impl_methods, mut fields, mut ctor, method_impls) = generate_trait_fns(&trait_block);
+    let (impl_name,
+         mock_method_name) = generate_mock_method_name(&trait_block);
     
-    let mock_method_body = generate_mock_method_body(quote!{ #pubtok }, quote!{ #mock_method_name });
+    let (mut mock_impl_methods,
+         mut fields,
+         mut ctor,
+         method_impls) = generate_trait_fns(&trait_block);
+    
+    let mock_method_body = generate_mock_method_body(&pubtok, &mock_method_name);
     let ref ty_param_bound = trait_block.ty_bounds;
 
     {
@@ -593,7 +592,7 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: &syn::Item) 
 
                 let fn_args  = parse_args(decl.inputs.clone());
                 let ref args_with_types = fn_args.args_with_types;
-                let (no_return, return_type) = parse_return_type(decl.clone().output);
+                let (no_return, return_type) = parse_return_type(&decl.output);
                 
                 let ref item_ident = item.ident;
                 let base_name = quote!{ #item_ident };
@@ -603,16 +602,15 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: &syn::Item) 
                 let clear_name = concat_idents("clear_", base_name.as_str());
                 extern_mocks_ctor_args = quote!{ #extern_mocks_ctor_args #name_lc: None, };
                 extern_mocks_def = quote!{ #extern_mocks_def #name_lc: Option<#name<#return_type>>, };
-                let pubtok;
-                if item.vis == syn::Visibility::Public {
-                    pubtok = quote!{ pub };
-                } else {
-                    pubtok = quote!{};
-                }
-                
-                let (return_statement, retval_statement, some_arg) = make_return_tokens(no_return, return_type.clone());
-                // Hardcore pub to true here, so that other modules can universally use Extern<>Mocks
-                let mock_method_body = generate_mock_method_body(quote!{ pub }, quote!{ #name });
+                let ref item_vis = item.vis;
+                let pubtok = quote!{ #item_vis };                
+                let (return_statement,
+                     retval_statement,
+                     some_arg) = make_return_tokens(no_return, &return_type);
+                // Hardcode pub to true here, so
+                // that other modules can universally use Extern<>Mocks
+                let mock_method_body = generate_mock_method_body(&quote!{ pub },
+                                                                 &quote!{ #name });
                 result = quote! {
                     #result
                     #mock_method_body
