@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 use mock_derive::mock;
+use export;
 
 #[mock]
 trait Base {
@@ -47,6 +48,24 @@ trait SelfOwnership {
 #[mock]
 unsafe trait UnsafeTrait {
     unsafe fn this_is_not_safe(&mut self);
+}
+
+mod contained {
+    use mock_derive::mock;
+    #[mock]
+    pub trait ContainedTrait {
+        fn mocked(&mut self) -> usize;
+    }
+}
+
+#[mock]
+trait UsingContained : contained::ContainedTrait {
+    fn mocked_derive(&mut self) -> isize;
+}
+
+#[mock]
+trait ExportInherited : export::ExportTrait {
+
 }
 
 // @TODO support
