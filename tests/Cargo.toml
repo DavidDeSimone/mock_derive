@@ -5,3 +5,7 @@ authors = ["DavidDeSimone <djd231@scarletmail.rutgers.edu>"]
 
 [dependencies]
 mock_derive = { version = "0.6.1", path = "../mock_derive" }
+
+[profile.test]
+lto = true
+codegen-units = 8
