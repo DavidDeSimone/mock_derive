@@ -73,6 +73,22 @@ trait ExportInherited : export::ExportTrait {
 
 }
 
+#[mock]
+trait StaticMethod {
+    fn st_method() -> usize;
+}
+
+#[mock]
+trait StaticMethodMixed {
+    fn st_method() -> usize;
+    fn is_method(&self) -> usize;
+}
+
+#[mock]
+trait UnsafeStaticMock {
+    unsafe fn st_method() -> usize;
+}
+
 // @TODO support
 /*
 trait BaseG<T> {
@@ -148,4 +164,14 @@ fn unsafety_trait() {
 
     mock.set_this_is_not_safe(method);
     unsafe { mock.this_is_not_safe() };
+}
+
+#[test]
+fn static_fn_test() {
+    let mock = MockStaticMethod::method_st_method()
+        .called_once()
+        .return_result_of(|| 25);
+    MockStaticMethod::set_st_method(mock);
+    assert!(MockStaticMethod::st_method() == 25);
+    MockStaticMethod::clear_st_method();
 }
