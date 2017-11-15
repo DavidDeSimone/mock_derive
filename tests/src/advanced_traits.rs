@@ -50,6 +50,11 @@ unsafe trait UnsafeTrait {
     unsafe fn this_is_not_safe(&mut self);
 }
 
+#[mock]
+trait SizedTrait : Sized {
+    fn foo(&self) -> usize;
+}
+
 mod contained {
     use mock_derive::mock;
     #[mock]

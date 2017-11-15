@@ -54,6 +54,7 @@ struct TraitBlock {
     ty_bounds: Vec<syn::TyParamBound>,
     unsafety: syn::Unsafety,
     package_path: quote::Tokens,
+    impls_sized: bool,
 }
 
 enum Mockable {
@@ -85,6 +86,18 @@ fn parse_block(item: &syn::Item) -> Mockable {
             let ref where_tok = generics.where_clause;
             let where_clause = quote! { #where_tok };
 
+            let mut impls_sized = false;
+            for item in ty_param_bound.iter() {
+                if let &syn::TyParamBound::Trait(ref poly_ref, _bound_modifier) = item {
+                    let ref trait_ref = poly_ref.trait_ref;
+                    let ref ident = trait_ref.segments.last().unwrap().ident;
+                    let qt = quote!{#ident};
+                    if qt.as_str() == "Sized" {
+                        impls_sized = true;
+                    }
+                }
+            }
+
             for item in items {
                 match item.node {
                     syn::TraitItemKind::Method(ref sig, ref _block) => {
@@ -107,6 +120,7 @@ fn parse_block(item: &syn::Item) -> Mockable {
                                          ty_bounds: ty_param_bound.clone(),
                                          unsafety: unsafety.clone(),
                                          package_path: quote!{ },
+                                         impls_sized: impls_sized,
             })
         },
         syn::ItemKind::ForeignMod(ref fmod) => {
@@ -119,7 +133,7 @@ fn parse_block(item: &syn::Item) -> Mockable {
 fn parse_args(decl: Vec<syn::FnArg>) -> FnArgs {
     let mut argc = 0;
     let mut args = FnArgs::new();
-    let arg_name = quote!{a};
+    let arg_name = quote!{_a};
     for input in decl {
         match input {
             syn::FnArg::SelfRef(lifetime, mutability) => {
@@ -357,9 +371,11 @@ fn generate_mock_method_name(trait_block: &TraitBlock) -> (quote::Tokens, quote:
     (quote! { #struct_name }, quote! { #mock_method_name })
 }
 
-fn generate_trait_fns(trait_block: &TraitBlock)
+fn generate_trait_fns(trait_block: &TraitBlock, allow_object_fallback: bool)
                       -> (quote::Tokens, quote::Tokens, quote::Tokens, quote::Tokens) {
     let trait_functions = trait_block.funcs.clone();
+    let ref trait_name = trait_block.trait_name;
+    let ref generics = trait_block.generics;
 
     let mut mock_impl_methods = quote::Tokens::new();
     let mut fields = quote::Tokens::new();
@@ -436,12 +452,16 @@ fn generate_trait_fns(trait_block: &TraitBlock)
             fallback = quote! {
                 panic!("Using a fallback for methods that take ownership of self is not supported. This is because the internals of our library do not know the size of your implementation at compile time, and will not be able to call the fallback method");
             };
-        } else {
+        } else if allow_object_fallback {
             fallback = quote! {
                 let ref #mut_token fallback = self.fallback
                     #get_ref
                 .expect("Called method without either a fallback, or a set result");
                 fallback.#name_stream(#args_with_no_self_no_types)
+            };
+        } else {
+            fallback = quote! {
+                panic!("Using a fallback has been disabled for this use case. We cannot use a fallback for Sized Types.");
             };
         }
 
@@ -474,6 +494,17 @@ fn generate_trait_fns(trait_block: &TraitBlock)
         });
     }
 
+    if allow_object_fallback {
+        fields.append(quote!{ fallback: Option<Box<#trait_name #generics>>, });
+        ctor.append(quote!{ fallback: None, });
+        mock_impl_methods.append(quote!{
+            #[allow(non_camel_case_types)]
+            pub fn set_fallback<__TYPE_NAME: 'static + #trait_name #generics>(&mut self, t: __TYPE_NAME) {
+                self.fallback = Some(Box::new(t));
+            }
+        });
+    }
+    
     (mock_impl_methods, fields, ctor, method_impls)
 }
 
@@ -493,7 +524,7 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
     let (mut mock_impl_methods,
          mut fields,
          mut ctor,
-         method_impls) = generate_trait_fns(&trait_block);
+         method_impls) = generate_trait_fns(&trait_block, !trait_block.impls_sized);
     
     let mock_method_body = generate_mock_method_body(&pubtok, &mock_method_name);
     let ref ty_param_bound = trait_block.ty_bounds;
@@ -501,7 +532,6 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
     {
         let mut bounds = BOUNDS_MAP.lock().unwrap();
         for item in ty_param_bound.iter() {
-            // @TODO we cannot ignore bound_modifier if we want to support ?Sized
             if let &syn::TyParamBound::Trait(ref poly_ref, _bound_modifier) = item {
                 let ref trait_ref = poly_ref.trait_ref;
                 let ref ident = trait_ref.segments.last().unwrap().ident;
@@ -523,7 +553,7 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
                     let (base_mock_impl_methods,
                          base_fields,
                          base_ctor,
-                         base_method_impls) = generate_trait_fns(&impl_body);
+                         base_method_impls) = generate_trait_fns(&impl_body, false);
 
                     mock_impl_methods.append(quote! { #base_mock_impl_methods });
                     fields.append(quote! { #base_fields });
@@ -538,13 +568,12 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
             }
         }
     }
-    
+
     let stream = quote! {
         #raw_trait
 
         #[allow(dead_code)]
         #pubtok struct #impl_name #generics #where_clause {
-            fallback: Option<Box<#trait_name #generics>>,
             #fields
         }
 
@@ -555,12 +584,7 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> quote::Tokens 
             #mock_impl_methods
 
             pub fn new() -> #impl_name #generics {
-                #impl_name { fallback: None, #ctor }
-            }
-
-            #[allow(non_camel_case_types)]
-            pub fn set_fallback<__TYPE_NAME: 'static + #trait_name #generics>(&mut self, t: __TYPE_NAME) {
-                self.fallback = Some(Box::new(t));
+                #impl_name { #ctor }
             }
         }
 
