@@ -838,8 +838,11 @@ fn parse_foreign_functions(func_block: syn::ForeignMod, _raw_block: &syn::Item) 
                     }
                 }
             },
-            syn::ForeignItemKind::Static(ref _ty, _mutability) => {
-                panic!("Mocking statics not yet supported.");
+            syn::ForeignItemKind::Static(ref ty, mutability) => {
+                let ref item_ident = item.ident;
+                result.append(quote!{
+                    static #mutability #item_ident: #ty = 0 as #ty;
+                });
             }
         }
     }
