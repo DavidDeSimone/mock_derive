@@ -7,7 +7,6 @@ extern "C" {
     pub fn c_div(x: isize, y: isize) -> isize;
     fn side_effect_fn(x: usize, y: usize);
     fn no_args_no_ret();
-    static mut X: i32;
 }
 
 #[allow(dead_code)]
@@ -68,12 +67,4 @@ fn extern_min_calls() {
     
     // Needed to trigger 'min call' related errors for extern fns
     ExternCMocks::clear_c_double();
-}
-
-#[test]
-fn mutate_statics() {
-    let value = unsafe { X };
-    assert!(value == 0);
-    unsafe { X = 25 };
-    assert!(unsafe { X } == 25);
 }
