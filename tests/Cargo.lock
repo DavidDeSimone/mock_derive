@@ -5,7 +5,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "mock_derive"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "lazy_static 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -39,7 +39,7 @@ dependencies = [
 name = "tests"
 version = "0.1.0"
 dependencies = [
- "mock_derive 0.6.1",
+ "mock_derive 0.7.0",
 ]
 
 [[package]]
