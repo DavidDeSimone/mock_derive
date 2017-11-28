@@ -207,5 +207,5 @@ There are some tests which double as examples in the tests/ directory. cd into t
 ## CONTRIBUTING
 Anyone is welcome to contribute! If you have an addition/bug fix that you would like to contribute, just open a PR and it will be looked at. Work in Progress (WIP) PRs are also welcome. Just include [WIP] in the name of the PR.
 
-## LISCENCE
+## LICENSE
 Mock_Derive is licensed under MIT. 
