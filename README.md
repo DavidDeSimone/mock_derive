@@ -17,6 +17,8 @@ Currently, mock_derive requires you to be running _nightly_ Rust. This will hope
 In traditional OO languages, mocking is usually based around inheritance, or a mix of method replacement in more dynamic languages. You make a `Foo` from a mock factory, define the behavior of that `Foo`, and pass it to functions expecting a `Foo`. Rust does not have traditional inheritance, meaning that *only a Foo is a Foo*. Mock_Derive encourages Implementation Mocking. This means that you will derive your mock for a trait. You will pass that mock to methods expecting something that implements that trait, and you will be able to control the behavior of that mock, similar to other mocking libs you may have worked with in the past.
 
 ## Examples
+See src/examples for working examples
+
 Using this crate looks something like this: 
 ``` rust
 #![feature(proc_macro)]
