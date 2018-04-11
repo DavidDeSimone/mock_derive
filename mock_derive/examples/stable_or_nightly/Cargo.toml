@@ -5,6 +5,7 @@ authors = [""]
 
 [dependencies]
 mock_derive = { path = "../../", optional = true }
+#mock_derive = { version = "...", optional = true }
 
 [features]
 nightly = ["mock_derive"]
