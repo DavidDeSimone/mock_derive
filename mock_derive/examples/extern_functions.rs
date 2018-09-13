@@ -43,3 +43,5 @@ mod test {
         unsafe { assert!(x_double(1) == 2) };
     }
 }
+
+fn main() {}

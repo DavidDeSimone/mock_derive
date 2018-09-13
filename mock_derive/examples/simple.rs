@@ -118,3 +118,5 @@ mod test_mocks {
         // mock.get_int(); // This would trigger a failure
     }
 }
+
+fn main() {}

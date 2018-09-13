@@ -44,3 +44,5 @@ mod test {
         assert!(mock.return_value(TEST_FLOAT.clone()) == &TEST_FLOAT);
     }
 }
+
+fn main() {}
