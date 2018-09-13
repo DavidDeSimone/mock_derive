@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#![feature(proc_macro)]
+#![feature(proc_macro_gen)]
 extern crate mock_derive;
 
 use mock_derive::mock;
