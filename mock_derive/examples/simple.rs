@@ -1,4 +1,4 @@
-#![feature(proc_macro)]
+#![feature(proc_macro_gen)]
 extern crate mock_derive;
 
 use mock_derive::mock;
@@ -29,6 +29,8 @@ impl CustomTrait for Foo {
         Some(self.get_int())
     }
 }
+
+fn main() {}
 
 #[cfg(test)]
 mod test {

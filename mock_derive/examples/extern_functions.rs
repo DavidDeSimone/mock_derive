@@ -1,4 +1,4 @@
-#![feature(proc_macro)]
+#![feature(proc_macro_gen)]
 extern crate mock_derive;
 
 use mock_derive::mock;
@@ -18,6 +18,8 @@ extern "C" {
 extern "Rust" {
     fn x_double(x: isize) -> isize;
 }
+
+fn main() {}
 
 #[cfg(test)]
 mod test {

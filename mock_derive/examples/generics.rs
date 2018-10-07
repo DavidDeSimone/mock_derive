@@ -1,4 +1,4 @@
-#![feature(proc_macro)]
+#![feature(proc_macro_gen)]
 extern crate mock_derive;
 
 use mock_derive::mock;
@@ -14,6 +14,8 @@ trait LifetimeTrait<'a, T>
     where T: 'a {
     fn return_value(&self, t: T) -> &'a T;
 }
+
+fn main() {}
 
 #[cfg(test)]
 mod test {

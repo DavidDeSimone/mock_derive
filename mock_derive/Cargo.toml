@@ -10,9 +10,10 @@ keywords = ["mock", "mocking", "unit-test", "testing"]
 categories = ["development-tools::testing", "development-tools::procedural-macro-helpers"]
 
 [dependencies]
-quote = "0.3"
-syn = { version = "0.11.11", features = ["full"] }
+quote = "0.6"
+syn = { version = "0.15", features = ["full"] }
 lazy_static = "0.2"
+proc-macro2 = "0.4"
 
 [lib]
 proc-macro = true
