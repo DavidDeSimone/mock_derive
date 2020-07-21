@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#![feature(proc_macro)]
 extern crate mock_derive;
 
 use mock_derive::mock;

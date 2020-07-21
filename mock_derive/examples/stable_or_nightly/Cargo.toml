@@ -1,11 +1,8 @@
 [package]
-name = "stable_or_nightly"
+name = "stable"
 version = "0.1.0"
 authors = [""]
 
 [dependencies]
 mock_derive = { path = "../../", optional = true }
 #mock_derive = { version = "...", optional = true }
-
-[features]
-nightly = ["mock_derive"]

@@ -1,12 +1,8 @@
-#![cfg_attr(feature = "nightly", feature(proc_macro))]
-
-#[cfg(feature = "nightly")]
 extern crate mock_derive;
 
-#[cfg(feature = "nightly")]
 use mock_derive::mock;
 
-#[cfg_attr(feature = "nightly", mock)]
+#[cfg_attr(mock)]
 pub trait CustomTrait {
     fn get_int(&self) -> u32;
     fn opt_int(&self) -> Option<u32>;
@@ -44,7 +40,7 @@ mod test {
     }
 }
 
-#[cfg(all(test, feature = "nightly"))]
+#[cfg(test)]
 mod test_mocks {
     use super::*;
 

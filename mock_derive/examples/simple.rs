@@ -1,4 +1,3 @@
-#![feature(proc_macro)]
 extern crate mock_derive;
 
 use mock_derive::mock;
@@ -39,7 +38,7 @@ mod test {
 
 }
 
-#[cfg(all(test, feature = "nightly"))]
+#[cfg(test)]
 mod test_mocks {
     use super::*;
 

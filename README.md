@@ -6,12 +6,10 @@ Mock_Derive is an easy to setup, rich mocking library for the Rust programming l
 In order to install, just add this line to your Cargo.toml
 ```
 [dependencies]
-mock_derive = "0.7.0"
+mock_derive = "0.7.1"
 ```
 
 As a friendly note, mock_derive is not yet a 1.0 crate, and is still under heavy development. As such, you may find several real world use cases that are not yet supported. If you find such a case, please open an issue and we will look at it as soon as possible.
-
-Currently, mock_derive requires you to be running _nightly_ Rust. This will hopefully change in the future, once proc macros are stable. You can however setup conditional building to only run mocked tests on nightly, see example in src/examples folder.
 
 ## How mock_derive is different to previous mocking libraries in other languages.
 In traditional OO languages, mocking is usually based around inheritance, or a mix of method replacement in more dynamic languages. You make a `Foo` from a mock factory, define the behavior of that `Foo`, and pass it to functions expecting a `Foo`. Rust does not have traditional inheritance, meaning that *only a Foo is a Foo*. Mock_Derive encourages Implementation Mocking. This means that you will derive your mock for a trait. You will pass that mock to methods expecting something that implements that trait, and you will be able to control the behavior of that mock, similar to other mocking libs you may have worked with in the past.
@@ -21,7 +19,6 @@ See src/examples for working examples
 
 Using this crate looks something like this: 
 ``` rust
-#![feature(proc_macro)]
 extern crate mock_derive;
 
 use mock_derive::mock;
