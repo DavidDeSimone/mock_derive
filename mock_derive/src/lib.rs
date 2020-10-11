@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#![feature(proc_macro)]
 #![recursion_limit = "256"]
 
 extern crate syn;

@@ -1,4 +1,3 @@
-#![feature(proc_macro)]
 extern crate mock_derive;
 
 use mock_derive::mock;
