@@ -2,9 +2,9 @@
 # It is not intended for manual editing.
 [[package]]
 name = "lazy_static"
-version = "0.2.8"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b37545ab726dd833ec6420aaba8231c5b320814b9029ad585555d2a03e94fbf"
+checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "mock_derive"

@@ -512,7 +512,7 @@ fn generate_trait_fns(trait_block: &TraitBlock, mut allow_object_fallback: bool)
             pub fn #setter(&mut self, method: #mock_method_name<#return_type>) {
                 self.#name_stream = Some(method);
             }
-        });;
+        });
 
         // The fields on the MockImpl struct.
         fields.append(quote! { #name_stream
@@ -882,7 +882,7 @@ fn make_mut_static(ident: quote::Tokens, ty: quote::Tokens, init_body: quote::To
                 #[allow(non_upper_case_globals)]
                 #[allow(non_snake_case)]
                 static #singleton_name: ::std::cell::RefCell<*const #reader_name> = ::std::cell::RefCell::new(0 as *const #reader_name);
-                static ONCE: ::std::sync::Once = ::std::sync::ONCE_INIT;
+                static ONCE: ::std::sync::Once = ::std::sync::Once::new();
             }
 
 
