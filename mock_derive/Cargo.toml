@@ -12,7 +12,7 @@ categories = ["development-tools::testing", "development-tools::procedural-macro
 [dependencies]
 quote = "0.3"
 syn = { version = "0.11.11", features = ["full"] }
-lazy_static = "0.2"
+lazy_static = "1.4.0"
 
 [lib]
 proc-macro = true
