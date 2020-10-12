@@ -36,13 +36,6 @@ use proc_macro::TokenStream;
 use std::fmt::Display;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 
-#[derive(Clone)]
-struct Function {
-    pub name: syn::Ident,
-    pub decl: syn::Signature,
-    pub safety: Option<syn::token::Unsafe>,
-}
-
 enum Mockable {
     ForeignFunctions(syn::ItemForeignMod),
     Trait(syn::ItemTrait),
