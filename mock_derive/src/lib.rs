@@ -136,15 +136,19 @@ fn parse_args<'a, I: Iterator<Item=&'a syn::FnArg>>(decl: I) -> FnArgs {
     let arg_name = quote!{_a};
     for input in decl {
         match input {
+            //The self argument of an associated method, whether taken by value or by reference.
+            //Note that self receivers with a specified type, such as self: Box<Self>, are parsed as a FnArg::Typed.
+            /// XXX need to support case of self: i32 etc.
             syn::FnArg::Receiver(arg_self) => {
-                if let Some(mutability) = arg_self.mutability {
+                if arg_self.reference.is_some() {
+                    let mutability = arg_self.mutability;
                     let lifetime = &arg_self.lifetime();
                     args.args_with_types = quote! { &#lifetime #mutability self };
-                    args.mutable_status = Some(mutability.clone());
+                    args.mutable_status = mutability.clone();
                     args.is_instance_method = true;
                 } else {
                     let mutability = arg_self.mutability;
-                    args.args_with_types = quote!{#mutability self };
+                    args.args_with_types = quote!{ #mutability self };
                     args.mutable_status = mutability.clone();
                     args.is_instance_method = true;
                     args.takes_self_ownership = true;

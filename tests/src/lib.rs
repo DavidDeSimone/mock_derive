@@ -26,15 +26,15 @@ extern crate mock_derive;
 
 use mock_derive::mock;
 
-mod export;
+// mod export;
 mod database;
 mod generics;
-mod foriegn_functions;
-mod foriegn_functions_mod2;
-mod advanced_traits;
+// mod foriegn_functions;
+// mod foriegn_functions_mod2;
+// mod advanced_traits;
 
-#[allow(unused_imports)]
-use export::ExportTrait;
+// #[allow(unused_imports)]
+// use export::ExportTrait;
 
 #[allow(dead_code)]
 struct Foo {
@@ -202,16 +202,16 @@ fn return_result_of_and_set_result() {
         .set_result(Some(13));
 }
 
-#[test]
-fn export_trait() {
-    let mut mock = export::MockExportTrait::new();
-    let method = mock.method_export_int().return_result_of(|| 22);
+// #[test]
+// fn export_trait() {
+//     let mut mock = export::MockExportTrait::new();
+//     let method = mock.method_export_int().return_result_of(|| 22);
 
-    mock.set_export_int(method);
-    for _ in 0..2300 {
-        assert!(mock.export_int() == 22);
-    }
-}
+//     mock.set_export_int(method);
+//     for _ in 0..2300 {
+//         assert!(mock.export_int() == 22);
+//     }
+// }
 
 #[test]
 #[should_panic(expected = "never called")]
