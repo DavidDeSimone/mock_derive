@@ -353,8 +353,8 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
 
                 if !fn_args.is_instance_method {
                     allow_object_fallback = false;
-                    let fn_args = parse_args(fnx.sig.inputs.iter());
-                    let ref args_with_types = fn_args.args_with_types;
+                    // let fn_args = parse_args(fnx.sig.inputs.iter());
+                    // let ref args_with_types = fn_args.args_with_types;
                     
                     let item_ident = name;
                     let base_name = quote!{ #item_ident };
@@ -510,7 +510,7 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
 
 
             },
-            _ => { continue; }
+            _ => { panic!("Mocking a struct with feature not supported."); }
         }
 
 
