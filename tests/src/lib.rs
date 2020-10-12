@@ -26,15 +26,15 @@ extern crate mock_derive;
 
 use mock_derive::mock;
 
-// mod export;
+mod export;
 mod database;
 mod generics;
-// mod foriegn_functions;
-// mod foriegn_functions_mod2;
+mod foriegn_functions;
+mod foriegn_functions_mod2;
 // mod advanced_traits;
 
-// #[allow(unused_imports)]
-// use export::ExportTrait;
+#[allow(unused_imports)]
+use export::ExportTrait;
 
 #[allow(dead_code)]
 struct Foo {
