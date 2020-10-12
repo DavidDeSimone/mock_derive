@@ -46,6 +46,8 @@ struct Function {
     pub safety: Option<syn::token::Unsafe>,
 }
 
+// What I think the issue here is that before these were quote::Tokens
+// and now with TokenStreams, this will cause the heap pointer to be freed
 #[derive(Clone)]
 struct TraitBlock {
     trait_name: proc_macro2::TokenStream,
@@ -168,36 +170,6 @@ fn parse_args<'a, I: Iterator<Item=&'a syn::FnArg>>(decl: I) -> FnArgs {
                 args.args_with_types.extend(quote! { #tok: #ty });
                 args.args_with_no_self_no_types.extend(quote! { #tok });
             }
-
-            // syn::FnArg::SelfRef(arg_self) => {
-            //     let mutability = &arg_self.mutability;
-            //     let lifetime = &arg_self.lifetime;
-            //     args.args_with_types = quote! { &#lifetime #mutability self };
-            //     args.mutable_status = mutability.clone();
-            //     args.is_instance_method = true;
-            // },
-            // syn::FnArg::SelfValue(arg_self) => {
-            //     let mutability = arg_self.mutability;
-            //     args.args_with_types = quote!{#mutability self };
-            //     args.mutable_status = mutability.clone();
-            //     args.is_instance_method = true;
-            //     args.takes_self_ownership = true;
-            // },
-            // syn::FnArg::Captured(captured) => {                
-            //     let ty = &captured.ty;
-            //     let tok = concat_idents(&arg_name, format!("{}", argc));
-            //     if argc > 0 {
-            //         args.args_with_types.extend(quote! {,});
-            //     }
-
-            //     if argc > 1 {
-            //         args.args_with_no_self_no_types.extend(quote!{,});
-            //     }
-
-            //     args.args_with_types.extend(quote! { #tok: #ty });
-            //     args.args_with_no_self_no_types.extend(quote! { #tok });
-            // },
-            // _ => {}
         }
 
         argc += 1;
@@ -669,49 +641,49 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> proc_macro2::T
     let mock_method_body = generate_mock_method_body(&pubtok, &mock_method_name);
     let ref ty_param_bound = trait_block.ty_bounds;
 
-    {
-        let mut bounds = BOUNDS_MAP.lock().unwrap();
-        for item in ty_param_bound.iter() {
-            if let &syn::TypeParamBound::Trait(ref trait_bound) = item {
-                let ref trait_ref = trait_bound.path;
-                let ref ident = trait_ref.segments.last().unwrap().ident;
-                let qt = quote!{#ident};
-                let path_str = format!("{}", qt);
-                if let Some(impl_body) = bounds.get_mut(&path_str) {
-                    let segments: syn::punctuated::Punctuated<_,_> = trait_ref.segments.iter().cloned()
-                        .take(trait_ref.segments.len() - 1).collect();
-                    if segments.len() > 0 {
-                        let path = syn::Path {
-                            leading_colon: trait_ref.leading_colon,
-                            segments: segments,
-                        };
-                        impl_body.package_path = path;
-                    }
+    // {
+    //     let mut bounds = BOUNDS_MAP.lock().unwrap();
+    //     for item in ty_param_bound.iter() {
+    //         if let &syn::TypeParamBound::Trait(ref trait_bound) = item {
+    //             let ref trait_ref = trait_bound.path;
+    //             let ref ident = trait_ref.segments.last().unwrap().ident;
+    //             let qt = quote!{#ident};
+    //             let path_str = format!("{}", qt);
+    //             if let Some(impl_body) = bounds.get_mut(&path_str) {
+    //                 let segments: syn::punctuated::Punctuated<_,_> = trait_ref.segments.iter().cloned()
+    //                     .take(trait_ref.segments.len() - 1).collect();
+    //                 if segments.len() > 0 {
+    //                     let path = syn::Path {
+    //                         leading_colon: trait_ref.leading_colon,
+    //                         segments: segments,
+    //                     };
+    //                     impl_body.package_path = path;
+    //                 }
                     
-                    let ref base_generics = impl_body.generics;
-                    let (base_mock_impl_methods,
-                         base_fields,
-                         base_ctor,
-                         base_method_impls,
-                         _,
-                         _,
-                         _,
-                         _,
-                         _) = generate_trait_fns(&impl_body, false);
+    //                 let ref base_generics = impl_body.generics;
+    //                 let (base_mock_impl_methods,
+    //                      base_fields,
+    //                      base_ctor,
+    //                      base_method_impls,
+    //                      _,
+    //                      _,
+    //                      _,
+    //                      _,
+    //                      _) = generate_trait_fns(&impl_body, false);
 
-                    mock_impl_methods.extend(quote! { #base_mock_impl_methods });
-                    fields.extend(quote! { #base_fields });
-                    ctor.extend(quote! { #base_ctor });
-                    derived_additions.extend(quote! {
-                        impl #base_generics #trait_ref #base_generics
-                            for #impl_name #generics #where_clause {
-                            #base_method_impls
-                        }
-                    });
-                }
-            }
-        }
-    }
+    //                 mock_impl_methods.extend(quote! { #base_mock_impl_methods });
+    //                 fields.extend(quote! { #base_fields });
+    //                 ctor.extend(quote! { #base_ctor });
+    //                 derived_additions.extend(quote! {
+    //                     impl #base_generics #trait_ref #base_generics
+    //                         for #impl_name #generics #where_clause {
+    //                         #base_method_impls
+    //                     }
+    //                 });
+    //             }
+    //         }
+    //     }
+    // }
 
     let static_struct_name = concat_idents("STATIC__", quote!{ #trait_name });
     let mut static_content = quote!{ };
@@ -766,9 +738,9 @@ fn parse_trait(trait_block: TraitBlock, raw_trait: &syn::Item) -> proc_macro2::T
         #derived_additions
     };
 
-    let mut map = BOUNDS_MAP.lock().unwrap();
-    let name_string = format!("{}", trait_name);
-    map.insert(name_string, trait_block.clone());
+    // let mut map = BOUNDS_MAP.lock().unwrap();
+    // let name_string = format!("{}", trait_name);
+    // map.insert(name_string, trait_block.clone());
 
     stream
 }
