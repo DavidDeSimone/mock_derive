@@ -36,6 +36,11 @@ use proc_macro::TokenStream;
 use std::fmt::Display;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 
+mod generator;
+
+// Goal is to get almost all quote! calls into template.rs
+
+
 enum Mockable {
     ForeignFunctions(syn::ItemForeignMod),
     Trait(syn::ItemTrait),
@@ -127,159 +132,6 @@ fn make_return_tokens(no_return: bool, return_type: &proc_macro2::TokenStream) -
     }
 }
 
-fn generate_mock_method_body(pubtok: &proc_macro2::TokenStream, mock_method_name: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
-    quote!{ 
-        #[allow(dead_code)]
-        #[allow(non_camel_case_types)]
-        #pubtok struct #mock_method_name<__RESULT_NAME> {
-            pub call_num: ::std::sync::Mutex<usize>,
-            pub current_num: ::std::sync::Mutex<usize>,
-            pub retval: ::std::sync::Mutex<::std::collections::HashMap<usize, __RESULT_NAME>>,
-            pub lambda: ::std::sync::Mutex<Option<Box<FnMut() -> __RESULT_NAME>>>,
-            pub should_never_be_called: bool,
-            pub max_calls: Option<usize>,
-            pub min_calls: Option<usize>,
-        }
-
-        #[allow(dead_code)]
-        #[allow(non_camel_case_types)]
-        impl<__RESULT_NAME> #mock_method_name<__RESULT_NAME> {
-            pub fn first_call(self) -> Self {
-                self.nth_call(1)
-            }
-
-            pub fn second_call(self) -> Self {
-                self.nth_call(2)
-            }
-
-            pub fn nth_call(self, num: usize) -> Self {
-                {
-                    let mut value = self.call_num.lock().unwrap();
-                    *value = num;
-                }
-                self
-            }
-
-            pub fn set_result(self, retval: __RESULT_NAME) -> Self {
-                {
-                    let lambda = self.lambda.lock().unwrap();
-                    if lambda.is_some() {
-                        panic!("Attempting to call set_result with after 'return_result_of' has been called. These two APIs are mutally exclusive, and should not be used together");
-                    }
-                    
-                }
-                
-                {
-                    let call_num = self.call_num.lock().unwrap();
-                    let mut map = self.retval.lock().unwrap();
-                    map.insert(*call_num, retval);
-                }
-                self
-            }
-
-            pub fn never_called(mut self) -> Self {
-                if self.max_calls.is_some() {
-                    panic!("Attempting to use never_called API after using called_at_most");
-                }
-                
-                self.should_never_be_called = true;
-                self
-            }
-
-            pub fn called_at_most(mut self, calls: usize) -> Self {
-                if self.should_never_be_called {
-                    panic!("Attempting to use called_at_most API after using never_called");
-                }
-                
-                self.max_calls = Some(calls); 
-                self
-            }
-
-            pub fn called_once(self) -> Self {
-                self.called_at_most(1)
-                    .called_at_least(1)
-            }
-
-            pub fn called_ntimes(self, calls: usize) -> Self {
-                self.called_at_most(calls)
-                    .called_at_least(calls)
-            }
-
-            pub fn called_at_least(mut self, calls: usize) -> Self {
-                self.min_calls = Some(calls);
-                self
-            }
-
-            fn exceedes_max_calls(&self, current_num: usize) -> bool {
-                let mut retval = false;
-                if let Some(max_calls) = self.max_calls {
-                    retval = current_num > max_calls
-                }
-                
-                retval
-            }
-
-            pub fn call(&self) -> Option<__RESULT_NAME> {
-                if self.should_never_be_called {
-                    panic!("Called a method that has been marked as 'never called'!");
-                }
-
-                let mut value = self.current_num.lock().unwrap();
-                let current_num = *value;
-                *value += 1;
-                
-                if self.exceedes_max_calls(current_num) {
-                    panic!("Method failed 'called at most', current number of calls is {}", current_num);
-                }
-
-                let mut lambda_result = self.lambda.lock().unwrap();
-                match *lambda_result {
-                    Some(ref mut lm) => {
-                        Some(lm())
-                    },
-                    None => {
-                        let mut map = self.retval.lock().unwrap();
-                        map.remove(&current_num)
-                    }
-                }                
-            }
-
-            pub fn return_result_of<F: 'static>(self, lambda: F) -> Self
-                where F: FnMut() -> __RESULT_NAME {
-                {
-                    let mut lambda_result = self.lambda.lock().unwrap();
-                    *lambda_result = Some(Box::new(lambda));
-                }
-                self
-            }
-        }
-
-        #[allow(dead_code)]
-        #[allow(non_camel_case_types)]
-        impl<__RESULT_NAME> ::std::ops::Drop for #mock_method_name<__RESULT_NAME> {
-            fn drop(&mut self) {
-                if let Some(min_calls) = self.min_calls {
-                    
-                    // When using API like "called_once", if the user calls a maximum number of times,
-                    // Drop may still be called, and we will be unable to get a lock on current_num.
-                    // In this case, just silently continue, as we are already in a panic, and a
-                    // double panic will cause rust to fail to run our tests.
-                    if let Ok(value) = self.current_num.lock() {
-                        let current_num = *value;
-                        // If we have exceeded our max number of calls, we are already panicing
-                        // And we don't want to double panic
-                        if current_num - 1 < min_calls {
-                            panic!("Method failed 'called at least', current number of calls is {}, minimum is {}",
-                                   current_num,
-                                   min_calls);                        
-                        } 
-                    }
-                }
-            }
-        }
-    }
-}
-
 fn parse_return_type(output: &syn::ReturnType) -> (bool, proc_macro2::TokenStream) {
     match output {
         &syn::ReturnType::Default => {
@@ -303,16 +155,20 @@ fn generate_mock_method_name(trait_block: &syn::ItemTrait) -> (proc_macro2::Toke
     (quote! { #struct_name }, quote! { #mock_method_name })
 }
 
+struct TraitFn {
+    mock_impl_methods: proc_macro2::TokenStream,
+    fields: proc_macro2::TokenStream,
+    ctor: proc_macro2::TokenStream,
+    method_impls: proc_macro2::TokenStream,
+    static_mocks_ctor: proc_macro2::TokenStream,
+    static_mocks_def: proc_macro2::TokenStream,
+    static_method_setup: proc_macro2::TokenStream,
+    static_method_impl: proc_macro2::TokenStream,
+    static_method_body: proc_macro2::TokenStream
+}
+
 fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: bool)
-                      -> (proc_macro2::TokenStream,
-                          proc_macro2::TokenStream,
-                          proc_macro2::TokenStream,
-                          proc_macro2::TokenStream,
-                          proc_macro2::TokenStream,
-                          proc_macro2::TokenStream,
-                          proc_macro2::TokenStream,
-                          proc_macro2::TokenStream,
-                          proc_macro2::TokenStream)
+                      -> TraitFn
 {
     let ref trait_functions = trait_block.items;
     let ref trait_name = trait_block.ident;
@@ -368,7 +224,7 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
                     let (return_statement,
                          retval_statement,
                          some_arg) = make_return_tokens(no_return, &return_type);
-                    let mock_method_body = generate_mock_method_body(&pubtok,
+                    let mock_method_body = generator::generate_mock_method_body(&pubtok,
                                                                      &quote!{ #name });
                     static_method_body.extend(mock_method_body);
                     static_method_setup.extend(quote!{
@@ -527,15 +383,15 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
         });
     }
     
-    (mock_impl_methods,
-     fields,
-     ctor,
-     method_impls,
-     static_method_setup,
-     static_method_impl,
-     static_method_body,
-     static_mocks_ctor,
-     static_mocks_def)
+    TraitFn { mock_impl_methods: mock_impl_methods,
+     fields: fields,
+     ctor: ctor,
+     method_impls: method_impls,
+     static_method_setup: static_method_setup,
+     static_method_impl: static_method_impl,
+     static_method_body: static_method_body,
+     static_mocks_ctor: static_mocks_ctor,
+     static_mocks_def: static_mocks_def }
 }
 
 fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro2::TokenStream {
@@ -551,6 +407,7 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
     let (impl_name,
          mock_method_name) = generate_mock_method_name(&trait_block);
     
+
     let mut impls_sized = false;
     for item in trait_block.supertraits.iter() {
         if let &syn::TypeParamBound::Trait(ref bound) = item {
@@ -563,63 +420,19 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
     }
 
 
-    let (mock_impl_methods,
-         fields,
-         ctor,
-         method_impls,
-         static_method_setup,
-         static_method_impl,
-         static_method_body,
-         static_mocks_ctor,
-         static_mocks_def) = generate_trait_fns(&trait_block, !impls_sized);
     
-    let mock_method_body = generate_mock_method_body(&pubtok, &mock_method_name);
-    // let ref ty_param_bound = trait_block.ty_bounds;
-
-    // {
-    //     let mut bounds = BOUNDS_MAP.lock().unwrap();
-    //     for item in ty_param_bound.iter() {
-    //         if let &syn::TypeParamBound::Trait(ref trait_bound) = item {
-    //             let ref trait_ref = trait_bound.path;
-    //             let ref ident = trait_ref.segments.last().unwrap().ident;
-    //             let qt = quote!{#ident};
-    //             let path_str = format!("{}", qt);
-    //             if let Some(impl_body) = bounds.get_mut(&path_str) {
-    //                 let segments: syn::punctuated::Punctuated<_,_> = trait_ref.segments.iter().cloned()
-    //                     .take(trait_ref.segments.len() - 1).collect();
-    //                 if segments.len() > 0 {
-    //                     let path = syn::Path {
-    //                         leading_colon: trait_ref.leading_colon,
-    //                         segments: segments,
-    //                     };
-    //                     impl_body.package_path = path;
-    //                 }
-                    
-    //                 let ref base_generics = impl_body.generics;
-    //                 let (base_mock_impl_methods,
-    //                      base_fields,
-    //                      base_ctor,
-    //                      base_method_impls,
-    //                      _,
-    //                      _,
-    //                      _,
-    //                      _,
-    //                      _) = generate_trait_fns(&impl_body, false);
-
-    //                 mock_impl_methods.extend(quote! { #base_mock_impl_methods });
-    //                 fields.extend(quote! { #base_fields });
-    //                 ctor.extend(quote! { #base_ctor });
-    //                 derived_additions.extend(quote! {
-    //                     impl #base_generics #trait_ref #base_generics
-    //                         for #impl_name #generics #where_clause {
-    //                         #base_method_impls
-    //                     }
-    //                 });
-    //             }
-    //         }
-    //     }
-    // }
-
+    let trait_fns = generate_trait_fns(&trait_block, !impls_sized);
+    let mock_impl_methods = trait_fns.mock_impl_methods;
+    let fields = trait_fns.fields;
+    let ctor = trait_fns.ctor;
+    let method_impls = trait_fns.method_impls;
+    let static_method_setup = trait_fns.static_method_setup;
+    let static_method_impl = trait_fns.static_method_impl;
+    let static_method_body = trait_fns.static_method_body;
+    let static_mocks_ctor = trait_fns.static_mocks_ctor;
+    let static_mocks_def = trait_fns.static_mocks_def;
+    
+    let mock_method_body = generator::generate_mock_method_body(&pubtok, &mock_method_name);
     let static_struct_name = concat_idents("STATIC__", quote!{ #trait_name });
     let mut static_content = quote!{ };
     if format!("{}", static_mocks_def).len() > 0 {
@@ -672,10 +485,6 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
 
         #derived_additions
     };
-
-    // let mut map = BOUNDS_MAP.lock().unwrap();
-    // let name_string = format!("{}", trait_name);
-    // map.insert(name_string, trait_block.clone());
 
     stream
 }
@@ -730,7 +539,7 @@ fn parse_foreign_functions(func_block: syn::ItemForeignMod, _raw_block: &syn::It
                      some_arg) = make_return_tokens(no_return, &return_type);
                 // Hardcode pub to true here, so
                 // that other modules can universally use Extern<>Mocks
-                let mock_method_body = generate_mock_method_body(&quote!{ pub },
+                let mock_method_body = generator::generate_mock_method_body(&quote!{ pub },
                                                                  &quote!{ #name });
                 result = quote! {
                     #result
