@@ -34,7 +34,7 @@ extern crate proc_macro2;
 use proc_macro::TokenStream;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 
-macro_rules! access {
+macro_rules! quote_field {
     ($x:expr) => {{
         {
             let ex = $x;
@@ -45,28 +45,13 @@ macro_rules! access {
 
 macro_rules! concat {
     ($x:expr, $y:expr) => {{
-        syn::Ident::new(&format!("{}{}", &$x, &$y), proc_macro2::Span::call_site())
+        let tx = syn::Ident::new(&format!("{}{}", $x, $y), proc_macro2::Span::call_site());
+        quote!{#tx}
     }};
 
     ($x:expr, $y:expr, $z:expr) => {{
         concat!($x, concat!($y, $z))
     }}
-}
-
-macro_rules! concat_q {
-    ($x:expr, $y:expr) => {{
-        {
-            let ex = concat!($x, $y);
-            quote!{#ex}
-        }
-    }};
-
-    ($x:expr, $y:expr, $z:expr) => {{
-        {
-            let ex = concat!($x, $y, $z);
-            quote!{#ex}
-        }
-    }};
 }
 
 macro_rules! pub_token {
@@ -204,12 +189,12 @@ fn parse_return_type(output: &syn::ReturnType) -> (bool, proc_macro2::TokenStrea
 }
 
 fn generate_static_name(base: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
-    concat_q!("Static_", base)
+    concat!("Static_", base)
 }
 
 fn generate_mock_method_name(trait_block: &syn::ItemTrait) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let trait_name = access!(&trait_block.ident);
-    (concat_q!("Mock", trait_name), concat_q!("MockMethodFor", trait_name))
+    let trait_name = quote_field!(&trait_block.ident);
+    (concat!("Mock", trait_name), concat!("MockMethodFor", trait_name))
 }
 
 
@@ -217,8 +202,8 @@ fn generate_mock_method_name(trait_block: &syn::ItemTrait) -> (proc_macro2::Toke
 fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: bool)
                       -> TraitFn
 {
-    let trait_name = access!(&trait_block.ident);
-    let generics = access!(&trait_block.generics);
+    let trait_name = quote_field!(&trait_block.ident);
+    let generics = quote_field!(&trait_block.generics);
 
     let mut mock_impl_methods = proc_macro2::TokenStream::new();
     let mut fields = proc_macro2::TokenStream::new();
@@ -237,10 +222,10 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
     for function in &trait_block.items {
         match function {
             syn::TraitItem::Method(fnx) => {
-                let name_stream = access!(&fnx.sig.ident);
-                let method_ident = concat_q!("method_", name_stream);
-                let setter = concat_q!("set_", name_stream);
-                let unsafety = access!(fnx.sig.unsafety);
+                let name_stream = quote_field!(&fnx.sig.ident);
+                let method_ident = concat!("method_", name_stream);
+                let setter = concat!("set_", name_stream);
+                let unsafety = quote_field!(fnx.sig.unsafety);
 
                 let fn_args = parse_args(fnx.sig.inputs.iter());
                 let (no_return, return_type) = parse_return_type(&fnx.sig.output);
@@ -255,7 +240,7 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
                 if !fn_args.is_instance_method {
                     allow_object_fallback = false;
 
-                    let name = concat_q!(trait_name, "_Method_", name_stream);
+                    let name = concat!(trait_name, "_Method_", name_stream);
                     let clear_name = concat!("clear_", name_stream);
                     let (return_statement,
                          retval_statement,
@@ -367,7 +352,7 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
                 // 'fields' of MockImpl
                 ctor.extend(quote! { #name_stream : None, });
 
-                let mut_token = access!(fn_args.mutable_status);
+                let mut_token = quote_field!(fn_args.mutable_status);
                 let get_ref;
                 if fn_args.mutable_status.is_some() {
                     get_ref = quote! { .as_mut() }
@@ -452,12 +437,12 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
 }
 
 fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro2::TokenStream {
-    let trait_name = access!(&trait_block.ident);
-    let generics = access!(&trait_block.generics);
-    let where_clause = access!(&trait_block.generics.where_clause);
-    let unsafety = access!(&trait_block.unsafety);
+    let trait_name = quote_field!(&trait_block.ident);
+    let generics = quote_field!(&trait_block.generics);
+    let where_clause = quote_field!(&trait_block.generics.where_clause);
+    let unsafety = quote_field!(&trait_block.unsafety);
     
-    let pubtok = access!(&trait_block.vis);
+    let pubtok = quote_field!(&trait_block.vis);
     let derived_additions = proc_macro2::TokenStream::new();
     
     let (impl_name,
@@ -487,7 +472,7 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
     let static_mocks_def = trait_fns.static_mocks_def;
     
     let mock_method_body = generate_mock_method_body(&pubtok, &mock_method_name);
-    let static_struct_name = concat_q!("STATIC__", trait_name);
+    let static_struct_name = concat!("STATIC__", trait_name);
     let mut static_content = quote!{ };
     if format!("{}", static_mocks_def).len() > 0 {
         let static_name = generate_static_name(&trait_name);
@@ -558,7 +543,7 @@ fn parse_foreign_functions(func_block: syn::ItemForeignMod, _raw_block: &syn::It
         type_name = String::from("Rust");
     }
     
-    let extern_name = concat_q!("Extern", type_name, "Mocks");//syn::Ident::new(&format!("Extern{}Mocks", type_name), proc_macro2::Span::call_site());
+    let extern_name = concat!("Extern", type_name, "Mocks");//syn::Ident::new(&format!("Extern{}Mocks", type_name), proc_macro2::Span::call_site());
     let static_name = concat!("Static", extern_name);
     for item in func_block.items {
         match item {
@@ -578,14 +563,14 @@ fn parse_foreign_functions(func_block: syn::ItemForeignMod, _raw_block: &syn::It
                 let ref args_with_types = fn_args.args_with_types;
                 let (no_return, return_type) = parse_return_type(&decl.output);
                 
-                let base_name = access!(&decl.ident);
+                let base_name = quote_field!(&decl.ident);
                 let name = concat!("Method_", base_name);
                 let name_lc = concat!("method_", base_name);
                 let setter_name = concat!("set_", base_name);
                 let clear_name = concat!("clear_", base_name);
                 extern_mocks_ctor_args = quote!{ #extern_mocks_ctor_args #name_lc: None, };
                 extern_mocks_def = quote!{ #extern_mocks_def #name_lc: Option<#name<#return_type>>, };
-                let pubtok = access!(&fn_item.vis);                
+                let pubtok = quote_field!(&fn_item.vis);                
                 let (return_statement,
                      retval_statement,
                      some_arg) = make_return_tokens(no_return, &return_type);
@@ -919,7 +904,7 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
        #[cfg(not(test))]
        macro_rules! mock_generate {
           () => {
-              #raw_item
+                #raw_item
            }
        }
 
