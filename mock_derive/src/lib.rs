@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2017 David DeSimone
+Copyright (c) 2020 David DeSimone
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -34,15 +34,96 @@ extern crate proc_macro2;
 use proc_macro::TokenStream;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 
-mod generator;
-#[macro_use]
-mod common_macros;
+macro_rules! access {
+    ($x:expr) => {{
+        {
+            let ex = $x;
+            quote! {#ex}
+        }
+    }};
+}
 
-// Goal is to get almost all quote! calls into generator.rs
+macro_rules! concat {
+    ($x:expr, $y:expr) => {{
+        syn::Ident::new(&format!("{}{}", &$x, &$y), proc_macro2::Span::call_site())
+    }};
+
+    ($x:expr, $y:expr, $z:expr) => {{
+        concat!($x, concat!($y, $z))
+    }}
+}
+
+macro_rules! concat_q {
+    ($x:expr, $y:expr) => {{
+        {
+            let ex = concat!($x, $y);
+            quote!{#ex}
+        }
+    }};
+
+    ($x:expr, $y:expr, $z:expr) => {{
+        {
+            let ex = concat!($x, $y, $z);
+            quote!{#ex}
+        }
+    }};
+}
+
+macro_rules! pub_token {
+    () => (quote!{ pub })
+}
+
 
 enum Mockable {
     ForeignFunctions(syn::ItemForeignMod),
     Trait(syn::ItemTrait),
+}
+
+struct MockInput {
+    pub item: syn::Item,
+}
+
+impl Parse for MockInput {
+    fn parse(input: ParseStream) -> ParseResult<Self> {
+        let item: syn::Item = match input.parse() {
+            Ok(i) => i,
+            Err(e) => return Err(e),
+        };
+
+        Ok(MockInput { item: item })
+    }
+}
+
+struct FnArgs {
+    args_with_types: proc_macro2::TokenStream,
+    args_with_no_self_no_types: proc_macro2::TokenStream,
+    mutable_status: Option<syn::token::Mut>,
+    is_instance_method: bool,
+    takes_self_ownership: bool,
+}
+
+impl FnArgs {
+    fn new() -> FnArgs {
+        FnArgs {
+            args_with_types: quote! { },
+            args_with_no_self_no_types: quote! { },
+            mutable_status: None,
+            is_instance_method: false,
+            takes_self_ownership: false,
+        }
+    }
+}
+
+struct TraitFn {
+    mock_impl_methods: proc_macro2::TokenStream,
+    fields: proc_macro2::TokenStream,
+    ctor: proc_macro2::TokenStream,
+    method_impls: proc_macro2::TokenStream,
+    static_mocks_ctor: proc_macro2::TokenStream,
+    static_mocks_def: proc_macro2::TokenStream,
+    static_method_setup: proc_macro2::TokenStream,
+    static_method_impl: proc_macro2::TokenStream,
+    static_method_body: proc_macro2::TokenStream
 }
 
 fn parse_block(item: &syn::Item) -> Mockable {
@@ -103,26 +184,6 @@ fn parse_args<'a, I: Iterator<Item=&'a syn::FnArg>>(decl: I) -> FnArgs {
     args
 }
 
-struct FnArgs {
-    args_with_types: proc_macro2::TokenStream,
-    args_with_no_self_no_types: proc_macro2::TokenStream,
-    mutable_status: Option<syn::token::Mut>,
-    is_instance_method: bool,
-    takes_self_ownership: bool,
-}
-
-impl FnArgs {
-    fn new() -> FnArgs {
-        FnArgs {
-            args_with_types: quote! { },
-            args_with_no_self_no_types: quote! { },
-            mutable_status: None,
-            is_instance_method: false,
-            takes_self_ownership: false,
-        }
-    }
-}
-
 fn make_return_tokens(no_return: bool, return_type: &proc_macro2::TokenStream) -> (proc_macro2::TokenStream, proc_macro2::TokenStream, proc_macro2::TokenStream) {
     if no_return {
         (proc_macro2::TokenStream::new(), proc_macro2::TokenStream::new(), quote! { _ })
@@ -151,17 +212,7 @@ fn generate_mock_method_name(trait_block: &syn::ItemTrait) -> (proc_macro2::Toke
     (concat_q!("Mock", trait_name), concat_q!("MockMethodFor", trait_name))
 }
 
-struct TraitFn {
-    mock_impl_methods: proc_macro2::TokenStream,
-    fields: proc_macro2::TokenStream,
-    ctor: proc_macro2::TokenStream,
-    method_impls: proc_macro2::TokenStream,
-    static_mocks_ctor: proc_macro2::TokenStream,
-    static_mocks_def: proc_macro2::TokenStream,
-    static_method_setup: proc_macro2::TokenStream,
-    static_method_impl: proc_macro2::TokenStream,
-    static_method_body: proc_macro2::TokenStream
-}
+
 
 fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: bool)
                       -> TraitFn
@@ -209,11 +260,20 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
                     let (return_statement,
                          retval_statement,
                          some_arg) = make_return_tokens(no_return, &return_type);
-                    let mock_method_body = generator::generate_mock_method_body(&pub_token!(),
-                                                                     &quote!{ #name });
+                    let mock_method_body = generate_mock_method_body(&pub_token!(), &name);
                     static_mocks_ctor.extend(quote!{ #method_ident: None, });
                     static_mocks_def.extend(quote!{ #method_ident: Option<#name<#return_type>>, });
                     static_method_body.extend(mock_method_body);
+
+                    /*
+                        inputs 
+                            method_ident
+                            name
+                            return_type
+                            setter
+                            static_name
+                            clear_name
+                    */
                     static_method_setup.extend(quote!{
                         #[allow(dead_code)]
                         pub fn #method_ident() -> #name<#return_type> {
@@ -242,6 +302,17 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
                             singleton.#method_ident = None;
                         }         
                     });
+
+                    /*
+                        unsafety
+                        name_stream
+                        args_with_types
+                        return_statement
+                        static_name
+                        method_ident
+                        some_arg
+                        retval_statement
+                    */
 
                     static_method_impl.extend(quote!{
                          #unsafety fn #name_stream (#args_with_types) #return_statement {
@@ -415,7 +486,7 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
     let static_mocks_ctor = trait_fns.static_mocks_ctor;
     let static_mocks_def = trait_fns.static_mocks_def;
     
-    let mock_method_body = generator::generate_mock_method_body(&pubtok, &mock_method_name);
+    let mock_method_body = generate_mock_method_body(&pubtok, &mock_method_name);
     let static_struct_name = concat_q!("STATIC__", trait_name);
     let mut static_content = quote!{ };
     if format!("{}", static_mocks_def).len() > 0 {
@@ -520,7 +591,7 @@ fn parse_foreign_functions(func_block: syn::ItemForeignMod, _raw_block: &syn::It
                      some_arg) = make_return_tokens(no_return, &return_type);
                 // Hardcode pub to true here, so
                 // that other modules can universally use Extern<>Mocks
-                let mock_method_body = generator::generate_mock_method_body(&pub_token!(),
+                let mock_method_body = generate_mock_method_body(&pub_token!(),
                                                                  &quote!{ #name });
                 result = quote! {
                     #result
@@ -669,18 +740,156 @@ fn make_mut_static(ident: &proc_macro2::TokenStream, ty: &proc_macro2::TokenStre
     }
 }
 
-struct MockInput {
-    pub item: syn::Item,
-}
+fn generate_mock_method_body(pubtok: &proc_macro2::TokenStream, mock_method_name: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    quote!{ 
+        #[allow(dead_code)]
+        #[allow(non_camel_case_types)]
+        #pubtok struct #mock_method_name<__RESULT_NAME> {
+            pub call_num: ::std::sync::Mutex<usize>,
+            pub current_num: ::std::sync::Mutex<usize>,
+            pub retval: ::std::sync::Mutex<::std::collections::HashMap<usize, __RESULT_NAME>>,
+            pub lambda: ::std::sync::Mutex<Option<Box<FnMut() -> __RESULT_NAME>>>,
+            pub should_never_be_called: bool,
+            pub max_calls: Option<usize>,
+            pub min_calls: Option<usize>,
+        }
 
-impl Parse for MockInput {
-    fn parse(input: ParseStream) -> ParseResult<Self> {
-        let item: syn::Item = match input.parse() {
-            Ok(i) => i,
-            Err(e) => return Err(e),
-        };
+        #[allow(dead_code)]
+        #[allow(non_camel_case_types)]
+        impl<__RESULT_NAME> #mock_method_name<__RESULT_NAME> {
+            pub fn first_call(self) -> Self {
+                self.nth_call(1)
+            }
 
-        Ok(MockInput { item: item })
+            pub fn second_call(self) -> Self {
+                self.nth_call(2)
+            }
+
+            pub fn nth_call(self, num: usize) -> Self {
+                {
+                    let mut value = self.call_num.lock().unwrap();
+                    *value = num;
+                }
+                self
+            }
+
+            pub fn set_result(self, retval: __RESULT_NAME) -> Self {
+                {
+                    let lambda = self.lambda.lock().unwrap();
+                    if lambda.is_some() {
+                        panic!("Attempting to call set_result with after 'return_result_of' has been called. These two APIs are mutally exclusive, and should not be used together");
+                    }
+                    
+                }
+                
+                {
+                    let call_num = self.call_num.lock().unwrap();
+                    let mut map = self.retval.lock().unwrap();
+                    map.insert(*call_num, retval);
+                }
+                self
+            }
+
+            pub fn never_called(mut self) -> Self {
+                if self.max_calls.is_some() {
+                    panic!("Attempting to use never_called API after using called_at_most");
+                }
+                
+                self.should_never_be_called = true;
+                self
+            }
+
+            pub fn called_at_most(mut self, calls: usize) -> Self {
+                if self.should_never_be_called {
+                    panic!("Attempting to use called_at_most API after using never_called");
+                }
+                
+                self.max_calls = Some(calls); 
+                self
+            }
+
+            pub fn called_once(self) -> Self {
+                self.called_at_most(1)
+                    .called_at_least(1)
+            }
+
+            pub fn called_ntimes(self, calls: usize) -> Self {
+                self.called_at_most(calls)
+                    .called_at_least(calls)
+            }
+
+            pub fn called_at_least(mut self, calls: usize) -> Self {
+                self.min_calls = Some(calls);
+                self
+            }
+
+            fn exceedes_max_calls(&self, current_num: usize) -> bool {
+                let mut retval = false;
+                if let Some(max_calls) = self.max_calls {
+                    retval = current_num > max_calls
+                }
+                
+                retval
+            }
+
+            pub fn call(&self) -> Option<__RESULT_NAME> {
+                if self.should_never_be_called {
+                    panic!("Called a method that has been marked as 'never called'!");
+                }
+
+                let mut value = self.current_num.lock().unwrap();
+                let current_num = *value;
+                *value += 1;
+                
+                if self.exceedes_max_calls(current_num) {
+                    panic!("Method failed 'called at most', current number of calls is {}", current_num);
+                }
+
+                let mut lambda_result = self.lambda.lock().unwrap();
+                match *lambda_result {
+                    Some(ref mut lm) => {
+                        Some(lm())
+                    },
+                    None => {
+                        let mut map = self.retval.lock().unwrap();
+                        map.remove(&current_num)
+                    }
+                }                
+            }
+
+            pub fn return_result_of<F: 'static>(self, lambda: F) -> Self
+                where F: FnMut() -> __RESULT_NAME {
+                {
+                    let mut lambda_result = self.lambda.lock().unwrap();
+                    *lambda_result = Some(Box::new(lambda));
+                }
+                self
+            }
+        }
+
+        #[allow(dead_code)]
+        #[allow(non_camel_case_types)]
+        impl<__RESULT_NAME> ::std::ops::Drop for #mock_method_name<__RESULT_NAME> {
+            fn drop(&mut self) {
+                if let Some(min_calls) = self.min_calls {
+                    
+                    // When using API like "called_once", if the user calls a maximum number of times,
+                    // Drop may still be called, and we will be unable to get a lock on current_num.
+                    // In this case, just silently continue, as we are already in a panic, and a
+                    // double panic will cause rust to fail to run our tests.
+                    if let Ok(value) = self.current_num.lock() {
+                        let current_num = *value;
+                        // If we have exceeded our max number of calls, we are already panicing
+                        // And we don't want to double panic
+                        if current_num - 1 < min_calls {
+                            panic!("Method failed 'called at least', current number of calls is {}, minimum is {}",
+                                   current_num,
+                                   min_calls);                        
+                        } 
+                    }
+                }
+            }
+        }
     }
 }
 
