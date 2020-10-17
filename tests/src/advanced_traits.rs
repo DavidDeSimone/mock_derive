@@ -55,23 +55,23 @@ trait SizedTrait : Sized {
     fn foo(&self) -> usize;
 }
 
-// mod contained {
-//     use mock_derive::mock;
-//     #[mock]
-//     pub trait ContainedTrait {
-//         fn mocked(&mut self) -> usize;
-//     }
-// }
+mod contained {
+    use mock_derive::mock;
+    #[mock]
+    pub trait ContainedTrait {
+        fn mocked(&mut self) -> usize;
+    }
+}
 
-// #[mock]
-// trait UsingContained : contained::ContainedTrait {
-//     fn mocked_derive(&mut self) -> isize;
-// }
+#[mock]
+trait UsingContained : contained::ContainedTrait {
+    fn mocked_derive(&mut self) -> isize;
+}
 
-// #[mock]
-// trait ExportInherited : export::ExportTrait {
+#[mock]
+trait ExportInherited : export::ExportTrait {
 
-// }
+}
 
 #[mock]
 trait StaticMethod {

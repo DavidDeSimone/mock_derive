@@ -202,14 +202,16 @@ fn generate_static_name(base: &proc_macro2::TokenStream) -> proc_macro2::TokenSt
     concat!("Static_", base)
 }
 
-fn generate_mock_method_name(trait_block: &syn::ItemTrait) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+fn generate_mock_method_name(trait_block: &syn::ItemTrait, prefix_opt: Option<proc_macro2::TokenStream>) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let trait_name = quote_field!(&trait_block.ident);
-    (concat!("Mock", trait_name), concat!("MockMethodFor", trait_name))
+    let mx = concat!("Mock", trait_name); 
+    let mxf = concat!("MockMethodFor", trait_name);
+    (quote!{ #prefix_opt #mx}, quote!{ #prefix_opt #mxf })
 }
 
 
 
-fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: bool)
+fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: bool, prefix: Option<proc_macro2::TokenStream>)
                       -> TraitFn
 {
     let trait_name = quote_field!(&trait_block.ident);
@@ -225,7 +227,7 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
     let mut static_method_impl = proc_macro2::TokenStream::new();
     let mut static_method_body = proc_macro2::TokenStream::new();
 
-    let (_, mock_method_name) = generate_mock_method_name(trait_block);
+    let (_, mock_method_name) = generate_mock_method_name(trait_block, prefix);
     let static_name = generate_static_name(&trait_name);
     // For each method in the Impl block, we create a "method_" name function that returns an
     // object to mutate
@@ -317,7 +319,7 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
                 // we generate a getter called method_foo, and a setter called set_foo.
                 // These methods will be put on the MockImpl struct.
                 mock_impl_methods.extend(quote! {
-                    pub fn #method_ident(&self) -> #mock_method_name<#return_type> {
+                    pub fn #method_ident(&self) -> #mock_method_name <#return_type> {
                         #mock_method_name {
                             call_num: ::std::sync::Mutex::new(1),
                             current_num: ::std::sync::Mutex::new(1),
@@ -329,14 +331,14 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
                         }
                     }
 
-                    pub fn #setter(&mut self, method: #mock_method_name<#return_type>) {
+                    pub fn #setter(&mut self, method: #mock_method_name <#return_type>) {
                         self.#name_stream = Some(method);
                     }
                 });
 
                 // The fields on the MockImpl struct.
                 fields.extend(quote! { #name_stream
-                                        : Option<#mock_method_name<#return_type>> , });
+                                        : Option <#mock_method_name <#return_type>> , });
 
                 // The values that we will set in the ctor for the above defined
                 // 'fields' of MockImpl
@@ -436,7 +438,7 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
     let mut derived_additions = proc_macro2::TokenStream::new();
     
     let (impl_name,
-         mock_method_name) = generate_mock_method_name(&trait_block);
+         mock_method_name) = generate_mock_method_name(&trait_block, None);
     
 
     let mut impls_sized = false;
@@ -450,7 +452,7 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
         }
     }
 
-    let trait_fns = generate_trait_fns(&trait_block, !impls_sized);
+    let trait_fns = generate_trait_fns(&trait_block, !impls_sized, None);
     let mut mock_impl_methods = trait_fns.mock_impl_methods;
     let mut fields = trait_fns.fields;
     let mut ctor = trait_fns.ctor;
@@ -473,16 +475,17 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
                     let impl_body = syn::parse_str::<syn::ItemTrait>(impl_body_str).unwrap();
                     let segments: syn::punctuated::Punctuated<_,_> = trait_ref.segments.iter().cloned()
                         .take(trait_ref.segments.len() - 1).collect();
+                    let mut basis = None;
                     if segments.len() > 0 {
-                        // let path = syn::Path {
-                        //     leading_colon: trait_ref.leading_colon,
-                        //     segments: segments,
-                        // };
-                        // impl_body.package_path = path;
+                        let path = syn::Path {
+                            leading_colon: trait_ref.leading_colon,
+                            segments: segments,
+                        };
+                        basis = Some(quote!{ #path :: });
                     }
                     
                     let ref base_generics = impl_body.generics;
-                    let ret = generate_trait_fns(&impl_body, false);
+                    let ret = generate_trait_fns(&impl_body, false, basis);
                     let base_mock_impl_methods = ret.mock_impl_methods;
                     let base_fields = ret.fields;
                     let base_ctor = ret.ctor;
@@ -560,10 +563,6 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
         let mut map = BOUNDS_MAP.lock().unwrap();
         let name = format!("{}", trait_name);
         let serial = format!("{}", quote!{ #trait_block });
-
-        // let bbx = syn::parse_str::<syn::ItemTrait>(&serial).unwrap();
-
-
         map.insert(name, serial);
     }
 
