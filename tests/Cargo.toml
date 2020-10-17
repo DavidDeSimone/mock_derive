@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["DavidDeSimone <djd231@scarletmail.rutgers.edu>"]
 
 [dependencies]
-mock_derive = { version = "0.7.0", path = "../mock_derive" }
+mock_derive = { version = "0.8.0", path = "../mock_derive" }
 
 [profile.test]
 lto = true
