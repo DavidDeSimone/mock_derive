@@ -454,7 +454,7 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
     let mut mock_impl_methods = trait_fns.mock_impl_methods;
     let mut fields = trait_fns.fields;
     let mut ctor = trait_fns.ctor;
-    let mut method_impls = trait_fns.method_impls;
+    let method_impls = trait_fns.method_impls;
     let static_method_setup = trait_fns.static_method_setup;
     let static_method_impl = trait_fns.static_method_impl;
     let static_method_body = trait_fns.static_method_body;
@@ -474,10 +474,10 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
                     let segments: syn::punctuated::Punctuated<_,_> = trait_ref.segments.iter().cloned()
                         .take(trait_ref.segments.len() - 1).collect();
                     if segments.len() > 0 {
-                        let path = syn::Path {
-                            leading_colon: trait_ref.leading_colon,
-                            segments: segments,
-                        };
+                        // let path = syn::Path {
+                        //     leading_colon: trait_ref.leading_colon,
+                        //     segments: segments,
+                        // };
                         // impl_body.package_path = path;
                     }
                     
