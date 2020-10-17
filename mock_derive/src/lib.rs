@@ -32,14 +32,46 @@ extern crate proc_macro;
 extern crate proc_macro2;
 
 use proc_macro::TokenStream;
-
-use std::fmt::Display;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 
 mod generator;
 
 // Goal is to get almost all quote! calls into template.rs
 
+macro_rules! access {
+    ($x:expr) => {{
+        {
+            let ex = &$x;
+            quote! {#ex}
+        }
+    }};
+}
+
+macro_rules! concat {
+    ($x:expr, $y:expr) => {{
+        syn::Ident::new(&format!("{}{}", &$x, &$y), proc_macro2::Span::call_site())
+    }};
+
+    ($x:expr, $y:expr, $z:expr) => {{
+        concat!($x, concat!($y, $z))
+    }}
+}
+
+macro_rules! concat_q {
+    ($x:expr, $y:expr) => {{
+        {
+            let ex = concat!($x, $y);
+            quote!{#ex}
+        }
+    }};
+
+    ($x:expr, $y:expr, $z:expr) => {{
+        {
+            let ex = concat!($x, $y, $z);
+            quote!{#ex}
+        }
+    }};
+}
 
 enum Mockable {
     ForeignFunctions(syn::ItemForeignMod),
@@ -84,7 +116,7 @@ fn parse_args<'a, I: Iterator<Item=&'a syn::FnArg>>(decl: I) -> FnArgs {
             },
             syn::FnArg::Typed(captured) => {
                 let ty = &captured.ty;
-                let tok = concat_idents(&arg_name, format!("{}", argc));
+                let tok = concat!(arg_name, argc);
                 if argc > 0 {
                     args.args_with_types.extend(quote! {,});
                 }
@@ -144,15 +176,12 @@ fn parse_return_type(output: &syn::ReturnType) -> (bool, proc_macro2::TokenStrea
 }
 
 fn generate_static_name(base: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
-    let idt = concat_idents("Static_", base);
-    quote!{ #idt }
+    concat_q!("Static_", base)
 }
 
 fn generate_mock_method_name(trait_block: &syn::ItemTrait) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let ref trait_name = trait_block.ident;
-    let struct_name = syn::Ident::new(&format!("{}{}", "Mock", &trait_name), proc_macro2::Span::call_site());
-    let mock_method_name = syn::Ident::new(&format!("{}{}", "MockMethodFor", &trait_name), proc_macro2::Span::call_site()); 
-    (quote! { #struct_name }, quote! { #mock_method_name })
+    let trait_name = access!(trait_block.ident);
+    (concat_q!("Mock", trait_name), concat_q!("MockMethodFor", trait_name))
 }
 
 struct TraitFn {
@@ -170,7 +199,6 @@ struct TraitFn {
 fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: bool)
                       -> TraitFn
 {
-    let ref trait_functions = trait_block.items;
     let ref trait_name = trait_block.ident;
     let ref generics = trait_block.generics;
 
@@ -188,20 +216,19 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
     let static_name = generate_static_name(&quote! {#trait_name});
     // For each method in the Impl block, we create a "method_" name function that returns an
     // object to mutate
-    for function in trait_functions {
+    for function in &trait_block.items {
         match function {
             syn::TraitItem::Method(fnx) => {
 
                 let ref name = fnx.sig.ident;
                 let name_stream = quote! { #name };
-                let ident = concat_idents("method_", &name_stream);
-                let setter = concat_idents("set_", &name_stream);
+                let ident = concat!("method_", access!(fnx.sig.ident));
+                let setter = concat!("set_", access!(fnx.sig.ident));
                 let fn_args = parse_args(fnx.sig.inputs.iter());
                 let ref args_with_no_self_no_types = fn_args.args_with_no_self_no_types;
                 let ref args_with_types = fn_args.args_with_types;
                 let (no_return, return_type) = parse_return_type(&fnx.sig.output);
-                let ref is_unsafe = fnx.sig.unsafety;
-                let unsafety = quote!{ #is_unsafe };
+                let unsafety = access!(fnx.sig.unsafety);
 
                 if &format!("{}", return_type) == "Self" {
                     panic!("Impls with the 'Self' return type are not supported. This is due to the fact that we generate an impl of your trait for a Mock struct. Methods that return Self will return an instance on our mock struct, not YOUR struct, which is not what you want.");
@@ -212,12 +239,11 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
                     // let fn_args = parse_args(fnx.sig.inputs.iter());
                     // let ref args_with_types = fn_args.args_with_types;
                     
-                    let item_ident = name;
-                    let base_name = quote!{ #item_ident };
+                    let base_name = access!(fnx.sig.ident);
                     let name = syn::Ident::new(&format!("{}_Method_{}", &trait_name, &base_name), proc_macro2::Span::call_site());
                     let name_lc = ident;
                     let setter_name = setter;
-                    let clear_name = concat_idents("clear_", &base_name);
+                    let clear_name = concat!("clear_", &base_name);
                     static_mocks_ctor.extend(quote!{ #name_lc: None, });
                     static_mocks_def.extend(quote!{ #name_lc: Option<#name<#return_type>>, });
                     let pubtok = quote!{ pub };
@@ -433,7 +459,7 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
     let static_mocks_def = trait_fns.static_mocks_def;
     
     let mock_method_body = generator::generate_mock_method_body(&pubtok, &mock_method_name);
-    let static_struct_name = concat_idents("STATIC__", quote!{ #trait_name });
+    let static_struct_name = concat!("STATIC__", quote!{ #trait_name });
     let mut static_content = quote!{ };
     if format!("{}", static_mocks_def).len() > 0 {
         let static_name = generate_static_name(&quote!{ #trait_name });
@@ -505,7 +531,7 @@ fn parse_foreign_functions(func_block: syn::ItemForeignMod, _raw_block: &syn::It
     }
     
     let extern_name = syn::Ident::new(&format!("Extern{}Mocks", type_name), proc_macro2::Span::call_site());
-    let static_name = concat_idents("Static", quote!{ #extern_name});
+    let static_name = concat!("Static", quote!{ #extern_name});
     for item in func_block.items {
         match item {
             syn::ForeignItem::Fn(ref fn_item) => {
@@ -526,10 +552,10 @@ fn parse_foreign_functions(func_block: syn::ItemForeignMod, _raw_block: &syn::It
                 
                 let ref item_ident = fn_item.sig.ident;
                 let base_name = quote!{ #item_ident };
-                let name = concat_idents("Method_", &base_name);
-                let name_lc = concat_idents("method_", &base_name);
-                let setter_name = concat_idents("set_", &base_name);
-                let clear_name = concat_idents("clear_", &base_name);
+                let name = concat!("Method_", &base_name);
+                let name_lc = concat!("method_", &base_name);
+                let setter_name = concat!("set_", &base_name);
+                let clear_name = concat!("clear_", &base_name);
                 extern_mocks_ctor_args = quote!{ #extern_mocks_ctor_args #name_lc: None, };
                 extern_mocks_def = quote!{ #extern_mocks_def #name_lc: Option<#name<#return_type>>, };
                 let ref item_vis = fn_item.vis;
@@ -638,8 +664,8 @@ fn parse_foreign_functions(func_block: syn::ItemForeignMod, _raw_block: &syn::It
 
 // https://stackoverflow.com/questions/27791532/how-do-i-create-a-global-mutable-singleton
 fn make_mut_static(ident: proc_macro2::TokenStream, ty: proc_macro2::TokenStream, init_body: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
-    let reader_name = concat_idents("__SingletonReader_", &ident);
-    let singleton_name = concat_idents("__SINGLETON_", &ident);
+    let reader_name = concat!("__SingletonReader_", &ident);
+    let singleton_name = concat!("__SINGLETON_", &ident);
     quote! {
         #[allow(non_camel_case_types)]
         #[derive(Clone)]
@@ -737,8 +763,4 @@ pub fn mock(_attr_ts: TokenStream, impl_ts: TokenStream) -> TokenStream {
     };
 
     final_output.into()
-}
-
-fn concat_idents<L: Display, R: Display>(lhs: L, rhs: R) -> syn::Ident {
-    syn::Ident::new(&format!("{}{}", lhs, rhs), proc_macro2::Span::call_site())
 }
