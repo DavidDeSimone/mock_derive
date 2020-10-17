@@ -30,9 +30,13 @@ extern crate syn;
 extern crate quote;
 extern crate proc_macro;
 extern crate proc_macro2;
+#[macro_use]
+extern crate lazy_static;
 
 use proc_macro::TokenStream;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 macro_rules! quote_field {
     ($x:expr) => {{
@@ -109,6 +113,12 @@ struct TraitFn {
     static_method_setup: proc_macro2::TokenStream,
     static_method_impl: proc_macro2::TokenStream,
     static_method_body: proc_macro2::TokenStream
+}
+
+lazy_static! {
+    static ref BOUNDS_MAP: Mutex<HashMap<String, String>> = {
+        Mutex::new(HashMap::new())
+    };
 }
 
 fn parse_block(item: &syn::Item) -> Mockable {
@@ -250,15 +260,6 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
                     static_mocks_def.extend(quote!{ #method_ident: Option<#name<#return_type>>, });
                     static_method_body.extend(mock_method_body);
 
-                    /*
-                        inputs 
-                            method_ident
-                            name
-                            return_type
-                            setter
-                            static_name
-                            clear_name
-                    */
                     static_method_setup.extend(quote!{
                         #[allow(dead_code)]
                         pub fn #method_ident() -> #name<#return_type> {
@@ -287,17 +288,6 @@ fn generate_trait_fns(trait_block: &syn::ItemTrait, mut allow_object_fallback: b
                             singleton.#method_ident = None;
                         }         
                     });
-
-                    /*
-                        unsafety
-                        name_stream
-                        args_with_types
-                        return_statement
-                        static_name
-                        method_ident
-                        some_arg
-                        retval_statement
-                    */
 
                     static_method_impl.extend(quote!{
                          #unsafety fn #name_stream (#args_with_types) #return_statement {
@@ -443,7 +433,7 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
     let unsafety = quote_field!(&trait_block.unsafety);
     
     let pubtok = quote_field!(&trait_block.vis);
-    let derived_additions = proc_macro2::TokenStream::new();
+    let mut derived_additions = proc_macro2::TokenStream::new();
     
     let (impl_name,
          mock_method_name) = generate_mock_method_name(&trait_block);
@@ -461,15 +451,56 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
     }
 
     let trait_fns = generate_trait_fns(&trait_block, !impls_sized);
-    let mock_impl_methods = trait_fns.mock_impl_methods;
-    let fields = trait_fns.fields;
-    let ctor = trait_fns.ctor;
-    let method_impls = trait_fns.method_impls;
+    let mut mock_impl_methods = trait_fns.mock_impl_methods;
+    let mut fields = trait_fns.fields;
+    let mut ctor = trait_fns.ctor;
+    let mut method_impls = trait_fns.method_impls;
     let static_method_setup = trait_fns.static_method_setup;
     let static_method_impl = trait_fns.static_method_impl;
     let static_method_body = trait_fns.static_method_body;
     let static_mocks_ctor = trait_fns.static_mocks_ctor;
     let static_mocks_def = trait_fns.static_mocks_def;
+
+    {
+        let mut bounds = BOUNDS_MAP.lock().unwrap();
+        for item in trait_block.supertraits.iter() {
+            if let &syn::TypeParamBound::Trait(ref trait_bound) = item {
+                let ref trait_ref = trait_bound.path;
+                let ref ident = trait_ref.segments.last().unwrap().ident;
+                let qt = quote!{#ident};
+                let path_str = format!("{}", qt);
+                if let Some(impl_body_str) = bounds.get_mut(&path_str) {
+                    let impl_body = syn::parse_str::<syn::ItemTrait>(impl_body_str).unwrap();
+                    let segments: syn::punctuated::Punctuated<_,_> = trait_ref.segments.iter().cloned()
+                        .take(trait_ref.segments.len() - 1).collect();
+                    if segments.len() > 0 {
+                        let path = syn::Path {
+                            leading_colon: trait_ref.leading_colon,
+                            segments: segments,
+                        };
+                        // impl_body.package_path = path;
+                    }
+                    
+                    let ref base_generics = impl_body.generics;
+                    let ret = generate_trait_fns(&impl_body, false);
+                    let base_mock_impl_methods = ret.mock_impl_methods;
+                    let base_fields = ret.fields;
+                    let base_ctor = ret.ctor;
+                    let base_method_impls = ret.method_impls;
+
+                    mock_impl_methods.extend(quote! { #base_mock_impl_methods });
+                    fields.extend(quote! { #base_fields });
+                    ctor.extend(quote! { #base_ctor });
+                    derived_additions.extend(quote! {
+                        impl #base_generics #trait_ref #base_generics
+                            for #impl_name #generics #where_clause {
+                            #base_method_impls
+                        }
+                    });
+                 }
+            }
+        }
+    }
     
     let mock_method_body = generate_mock_method_body(&pubtok, &mock_method_name);
     let static_struct_name = concat!("STATIC__", trait_name);
@@ -524,6 +555,17 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
 
         #derived_additions
     };
+
+    {
+        let mut map = BOUNDS_MAP.lock().unwrap();
+        let name = format!("{}", trait_name);
+        let serial = format!("{}", quote!{ #trait_block });
+
+        // let bbx = syn::parse_str::<syn::ItemTrait>(&serial).unwrap();
+
+
+        map.insert(name, serial);
+    }
 
     stream
 }

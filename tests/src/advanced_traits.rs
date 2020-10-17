@@ -23,10 +23,21 @@ SOFTWARE.
 */
 
 use mock_derive::mock;
+use export;
 
 #[mock]
 trait Base {
     fn add(&self, x: i32, y: usize) -> usize;
+}
+
+#[mock]
+trait Derived : Base {
+    fn sub(&self, x: i32, y: usize) -> usize;
+}
+
+#[mock]
+trait Compisition : Base + Derived {
+    fn x(&self) -> isize;
 }
 
 #[mock]
@@ -38,6 +49,29 @@ trait SelfOwnership {
 unsafe trait UnsafeTrait {
     unsafe fn this_is_not_safe(&mut self);
 }
+
+#[mock]
+trait SizedTrait : Sized {
+    fn foo(&self) -> usize;
+}
+
+// mod contained {
+//     use mock_derive::mock;
+//     #[mock]
+//     pub trait ContainedTrait {
+//         fn mocked(&mut self) -> usize;
+//     }
+// }
+
+// #[mock]
+// trait UsingContained : contained::ContainedTrait {
+//     fn mocked_derive(&mut self) -> isize;
+// }
+
+// #[mock]
+// trait ExportInherited : export::ExportTrait {
+
+// }
 
 #[mock]
 trait StaticMethod {
@@ -53,6 +87,34 @@ trait StaticMethodMixed {
 #[mock]
 trait UnsafeStaticMock {
     unsafe fn st_method() -> usize;
+}
+
+// @TODO support
+/*
+trait BaseG<T> {
+...
+};
+trait DerivedG : BaseG<usize> {
+...
+};
+*/
+
+#[test]
+fn mock_derived() {
+    let mut mock_derived = MockDerived::new();
+    let method_derived = mock_derived.method_sub()
+        .called_once()
+        .return_result_of(|| 25);
+    
+    mock_derived.set_sub(method_derived);
+    assert!(mock_derived.sub(0, 0) == 25);
+
+    let method_base = mock_derived.method_add()
+        .called_once()
+        .return_result_of(|| 25);
+
+    mock_derived.set_add(method_base);
+    assert!(mock_derived.add(0, 0) == 25);
 }
 
 #[test]
