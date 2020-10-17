@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2017 David DeSimone
+Copyright (c) 2020 David DeSimone
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -94,7 +94,6 @@ trait UnsafeStaticMock {
 trait BaseG<T> {
 ...
 };
-
 trait DerivedG : BaseG<usize> {
 ...
 };
