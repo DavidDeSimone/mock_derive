@@ -107,9 +107,9 @@ trait DerivedG : BaseG<usize> {
 */
 
 #[test]
-#[should_panic]
 fn print_trait() {
     let mock_debugged = MockDebuggedTrait::new();
+    mock_debugged.set_print_string(String::from("Hello Mocks"));
     println!("{:?}", mock_debugged);
 }
 
