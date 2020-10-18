@@ -25,6 +25,8 @@ SOFTWARE.
 use mock_derive::mock;
 use export;
 
+use std::fmt::Debug;
+
 #[mock]
 trait Base {
     fn add(&self, x: i32, y: usize) -> usize;
@@ -89,6 +91,11 @@ trait UnsafeStaticMock {
     unsafe fn st_method() -> usize;
 }
 
+#[mock]
+trait DebuggedTrait : Debug {
+    fn foo(&self);
+}
+
 // @TODO support
 /*
 trait BaseG<T> {
@@ -98,6 +105,13 @@ trait DerivedG : BaseG<usize> {
 ...
 };
 */
+
+#[test]
+#[should_panic]
+fn print_trait() {
+    let mock_debugged = MockDebuggedTrait::new();
+    println!("{:?}", mock_debugged);
+}
 
 #[test]
 fn mock_derived() {

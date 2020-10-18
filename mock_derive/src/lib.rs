@@ -536,6 +536,14 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
             #fields
         }
 
+        #[allow(dead_code)]
+        #[allow(non_camel_case_types)]
+        impl #generics ::std::fmt::Debug for #impl_name #generics #where_clause {
+            fn fmt(&self, _f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                panic!("Printing mocks is not supported. Do not call println on mocks.");
+            }
+        }
+
         // Your mocks may not use all of these functions, so it's fine to allow
         // dead code in this impl block.
         #[allow(dead_code)]
