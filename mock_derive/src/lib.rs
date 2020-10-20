@@ -504,6 +504,9 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
             }
         }
     }
+
+    fields.extend(quote! { print_string: ::std::sync::Mutex<Option<String>>, });
+    ctor.extend(quote! { print_string : ::std::sync::Mutex::new(None), });
     
     let mock_method_body = generate_mock_method_body(&pubtok, &mock_method_name);
     let static_struct_name = concat!("STATIC__", trait_name);
@@ -536,6 +539,21 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
             #fields
         }
 
+        #[allow(dead_code)]
+        #[allow(non_camel_case_types)]
+        impl #generics ::std::fmt::Debug for #impl_name #generics #where_clause {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                // panic!("Printing mocks is not supported. Do not call println on mocks.");
+                let print_string = self.print_string.lock().unwrap();
+                let mut message = "This is the default message for a mock object. You can set the print behavior via a call to 'set_print_string'";
+                if print_string.as_ref().is_some() {
+                    message = print_string.as_ref().unwrap();
+                }
+
+                f.pad(&message)
+            }
+        }
+
         // Your mocks may not use all of these functions, so it's fine to allow
         // dead code in this impl block.
         #[allow(dead_code)]
@@ -545,6 +563,11 @@ fn parse_trait(trait_block: syn::ItemTrait, raw_trait: &syn::Item) -> proc_macro
 
             pub fn new() -> #impl_name #generics {
                 #impl_name { #ctor }
+            }
+
+            pub fn set_print_string(&self, arg_string: String) {
+                let mut print_string = self.print_string.lock().unwrap();
+                *print_string = Some(arg_string);
             }
         }
 
